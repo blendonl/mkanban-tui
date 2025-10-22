@@ -13,6 +13,7 @@ type Task struct {
 	priority      valueobject.Priority
 	status        valueobject.Status
 	tags          []string
+	metadata      map[string]string
 	createdAt     time.Time
 	modifiedAt    time.Time
 	dueDate       *time.Time
@@ -48,6 +49,7 @@ func NewTask(
 		priority:    priority,
 		status:      status,
 		tags:        make([]string, 0),
+		metadata:    make(map[string]string),
 		createdAt:   now,
 		modifiedAt:  now,
 	}, nil
@@ -213,4 +215,52 @@ func (t *Task) IsOverdue() bool {
 		return false
 	}
 	return t.dueDate.Before(time.Now())
+}
+
+// Metadata returns a copy of the task metadata
+func (t *Task) Metadata() map[string]string {
+	if t.metadata == nil {
+		return make(map[string]string)
+	}
+	metadataCopy := make(map[string]string, len(t.metadata))
+	for k, v := range t.metadata {
+		metadataCopy[k] = v
+	}
+	return metadataCopy
+}
+
+// GetMetadata retrieves a specific metadata value by key
+func (t *Task) GetMetadata(key string) (string, bool) {
+	if t.metadata == nil {
+		return "", false
+	}
+	value, exists := t.metadata[key]
+	return value, exists
+}
+
+// SetMetadata sets a metadata key-value pair
+func (t *Task) SetMetadata(key, value string) {
+	if t.metadata == nil {
+		t.metadata = make(map[string]string)
+	}
+	t.metadata[key] = value
+	t.modifiedAt = time.Now()
+}
+
+// HasMetadata checks if a metadata key exists
+func (t *Task) HasMetadata(key string) bool {
+	if t.metadata == nil {
+		return false
+	}
+	_, exists := t.metadata[key]
+	return exists
+}
+
+// RemoveMetadata removes a metadata key
+func (t *Task) RemoveMetadata(key string) {
+	if t.metadata == nil {
+		return
+	}
+	delete(t.metadata, key)
+	t.modifiedAt = time.Now()
 }

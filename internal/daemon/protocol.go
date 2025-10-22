@@ -4,15 +4,16 @@ import "mkanban/internal/application/dto"
 
 // Request types
 const (
-	RequestGetBoard     = "get_board"
-	RequestListBoards   = "list_boards"
-	RequestCreateBoard  = "create_board"
-	RequestAddTask      = "add_task"
-	RequestMoveTask     = "move_task"
-	RequestUpdateTask   = "update_task"
-	RequestDeleteTask   = "delete_task"
-	RequestAddColumn    = "add_column"
-	RequestDeleteColumn = "delete_column"
+	RequestGetBoard        = "get_board"
+	RequestListBoards      = "list_boards"
+	RequestCreateBoard     = "create_board"
+	RequestAddTask         = "add_task"
+	RequestMoveTask        = "move_task"
+	RequestUpdateTask      = "update_task"
+	RequestDeleteTask      = "delete_task"
+	RequestAddColumn       = "add_column"
+	RequestDeleteColumn    = "delete_column"
+	RequestGetActiveBoard  = "get_active_board"
 )
 
 // Request represents a client request to the daemon

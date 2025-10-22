@@ -17,10 +17,11 @@ const (
 
 // Config holds application configuration
 type Config struct {
-	Storage    StorageConfig    `yaml:"storage"`
-	Daemon     DaemonConfig     `yaml:"daemon"`
-	TUI        TUIConfig        `yaml:"tui"`
-	Keybindings KeybindingsConfig `yaml:"keybindings"`
+	Storage        StorageConfig        `yaml:"storage"`
+	Daemon         DaemonConfig         `yaml:"daemon"`
+	TUI            TUIConfig            `yaml:"tui"`
+	Keybindings    KeybindingsConfig    `yaml:"keybindings"`
+	SessionTracking SessionTrackingConfig `yaml:"session_tracking"`
 }
 
 // StorageConfig holds storage-related configuration
@@ -78,6 +79,23 @@ type KeybindingsConfig struct {
 	Add    []string `yaml:"add"`
 	Delete []string `yaml:"delete"`
 	Quit   []string `yaml:"quit"`
+}
+
+// SessionTrackingConfig holds session tracking configuration
+type SessionTrackingConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	PollInterval     int    `yaml:"poll_interval"` // in seconds
+	TrackerType      string `yaml:"tracker_type"`  // "tmux", "zellij", etc.
+	GeneralBoardName string `yaml:"general_board_name"`
+	GitSync          GitSyncConfig `yaml:"git_sync"`
+}
+
+// GitSyncConfig holds git synchronization configuration
+type GitSyncConfig struct {
+	Enabled            bool `yaml:"enabled"`
+	AutoSyncBranches   bool `yaml:"auto_sync_branches"`
+	WatchForChanges    bool `yaml:"watch_for_changes"`
+	CreateTasksForRemotes bool `yaml:"create_tasks_for_remotes"`
 }
 
 // Loader handles loading and saving configuration
@@ -211,6 +229,18 @@ func (l *Loader) createDefaultConfig() (*Config, error) {
 			Add:    []string{"a"},
 			Delete: []string{"d"},
 			Quit:   []string{"q", "ctrl+c"},
+		},
+		SessionTracking: SessionTrackingConfig{
+			Enabled:          true,
+			PollInterval:     5,
+			TrackerType:      "tmux",
+			GeneralBoardName: "General Tasks",
+			GitSync: GitSyncConfig{
+				Enabled:               true,
+				AutoSyncBranches:      true,
+				WatchForChanges:       true,
+				CreateTasksForRemotes: false,
+			},
 		},
 	}
 

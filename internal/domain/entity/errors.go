@@ -24,6 +24,12 @@ var (
 	ErrEmptyTaskName     = errors.New("task name cannot be empty")
 	ErrInvalidTaskID     = errors.New("invalid task ID format")
 
+	// Session errors
+	ErrSessionNotFound    = errors.New("session not found")
+	ErrEmptySessionName   = errors.New("session name cannot be empty")
+	ErrInvalidSessionType = errors.New("invalid session type")
+	ErrEmptyWorkingDir    = errors.New("working directory cannot be empty")
+
 	// Validation errors
 	ErrInvalidPriority   = errors.New("invalid priority value")
 	ErrInvalidStatus     = errors.New("invalid status value")

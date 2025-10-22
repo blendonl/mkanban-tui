@@ -16,10 +16,11 @@ import (
 
 // Server represents the daemon server
 type Server struct {
-	container *di.Container
-	config    *config.Config
-	listener  net.Listener
-	mu        sync.RWMutex
+	container      *di.Container
+	config         *config.Config
+	listener       net.Listener
+	sessionManager *SessionManager
+	mu             sync.RWMutex
 }
 
 // NewServer creates a new daemon server
@@ -38,6 +39,28 @@ func NewServer(cfg *config.Config) (*Server, error) {
 
 // Start starts the daemon server
 func (s *Server) Start() error {
+	ctx := context.Background()
+
+	// Initialize session manager if session tracking use cases are available
+	if s.container.TrackSessionsUseCase != nil &&
+		s.container.SessionTracker != nil &&
+		s.container.ChangeWatcher != nil &&
+		s.container.BoardSyncStrategies != nil {
+
+		s.sessionManager = NewSessionManager(
+			s.container.Config,
+			s.container.TrackSessionsUseCase,
+			s.container.SessionTracker,
+			s.container.ChangeWatcher,
+			s.container.BoardSyncStrategies,
+		)
+
+		if err := s.sessionManager.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start session manager: %w", err)
+		}
+		fmt.Println("Session tracking started")
+	}
+
 	socketDir := s.config.Daemon.SocketDir
 	if err := os.MkdirAll(socketDir, 0755); err != nil {
 		return fmt.Errorf("failed to create socket directory: %w", err)
@@ -115,6 +138,8 @@ func (s *Server) handleRequest(req *Request) *Response {
 		return s.handleAddColumn(ctx, req)
 	case RequestDeleteColumn:
 		return s.handleDeleteColumn(ctx, req)
+	case RequestGetActiveBoard:
+		return s.handleGetActiveBoard(ctx)
 	default:
 		return &Response{
 			Success: false,
@@ -284,6 +309,25 @@ func (s *Server) handleDeleteColumn(ctx context.Context, req *Request) *Response
 	return &Response{Success: false, Error: "delete column not yet implemented"}
 }
 
+// handleGetActiveBoard returns the board ID for the active session
+func (s *Server) handleGetActiveBoard(ctx context.Context) *Response {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check if we have the GetActiveSessionBoardUseCase
+	if s.container.GetActiveSessionBoardUseCase == nil {
+		return &Response{Success: false, Error: "session tracking not available"}
+	}
+
+	boardID, err := s.container.GetActiveSessionBoardUseCase.Execute(ctx)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	// Return the board ID (may be empty if no active session)
+	return &Response{Success: true, Data: map[string]string{"board_id": boardID}}
+}
+
 // decodePayload decodes request payload into target struct
 func (s *Server) decodePayload(payload interface{}, target interface{}) error {
 	data, err := json.Marshal(payload)
@@ -309,6 +353,14 @@ func (s *Server) sendError(encoder *json.Encoder, message string) {
 
 // Stop stops the daemon server
 func (s *Server) Stop() error {
+	// Stop session manager if it exists
+	if s.sessionManager != nil {
+		if err := s.sessionManager.Stop(); err != nil {
+			fmt.Printf("Error stopping session manager: %v\n", err)
+		}
+	}
+
+	// Close the listener
 	if s.listener != nil {
 		return s.listener.Close()
 	}

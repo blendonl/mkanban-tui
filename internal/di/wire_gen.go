@@ -7,12 +7,15 @@
 package di
 
 import (
+	"mkanban/internal/application/strategy"
 	"mkanban/internal/application/usecase/board"
 	"mkanban/internal/application/usecase/column"
+	"mkanban/internal/application/usecase/session"
 	"mkanban/internal/application/usecase/task"
 	"mkanban/internal/domain/repository"
 	"mkanban/internal/domain/service"
 	"mkanban/internal/infrastructure/config"
+	"mkanban/internal/infrastructure/external"
 	"mkanban/internal/infrastructure/persistence/filesystem"
 )
 
@@ -27,6 +30,13 @@ func InitializeContainer() (*Container, error) {
 	boardRepository := ProvideBoardRepository(config)
 	validationService := ProvideValidationService(boardRepository)
 	boardService := ProvideBoardService(boardRepository, validationService)
+	sessionTracker := ProvideSessionTracker()
+	vcsProvider := ProvideVCSProvider()
+	changeWatcher, err := ProvideChangeWatcher()
+	if err != nil {
+		return nil, err
+	}
+	v := ProvideBoardSyncStrategies(vcsProvider, config)
 	createBoardUseCase := board.NewCreateBoardUseCase(boardService)
 	getBoardUseCase := board.NewGetBoardUseCase(boardRepository)
 	listBoardsUseCase := board.NewListBoardsUseCase(boardRepository)
@@ -34,18 +44,28 @@ func InitializeContainer() (*Container, error) {
 	createTaskUseCase := task.NewCreateTaskUseCase(boardService)
 	moveTaskUseCase := task.NewMoveTaskUseCase(boardService)
 	updateTaskUseCase := task.NewUpdateTaskUseCase(boardService)
+	syncSessionBoardUseCase := session.NewSyncSessionBoardUseCase(boardRepository, boardService, validationService, v)
+	trackSessionsUseCase := session.NewTrackSessionsUseCase(sessionTracker, syncSessionBoardUseCase)
+	getActiveSessionBoardUseCase := session.NewGetActiveSessionBoardUseCase(sessionTracker, boardRepository, v)
 	container := &Container{
-		Config:              config,
-		BoardRepo:           boardRepository,
-		ValidationService:   validationService,
-		BoardService:        boardService,
-		CreateBoardUseCase:  createBoardUseCase,
-		GetBoardUseCase:     getBoardUseCase,
-		ListBoardsUseCase:   listBoardsUseCase,
-		CreateColumnUseCase: createColumnUseCase,
-		CreateTaskUseCase:   createTaskUseCase,
-		MoveTaskUseCase:     moveTaskUseCase,
-		UpdateTaskUseCase:   updateTaskUseCase,
+		Config:                       config,
+		BoardRepo:                    boardRepository,
+		ValidationService:            validationService,
+		BoardService:                 boardService,
+		SessionTracker:               sessionTracker,
+		VCSProvider:                  vcsProvider,
+		ChangeWatcher:                changeWatcher,
+		BoardSyncStrategies:          v,
+		CreateBoardUseCase:           createBoardUseCase,
+		GetBoardUseCase:              getBoardUseCase,
+		ListBoardsUseCase:            listBoardsUseCase,
+		CreateColumnUseCase:          createColumnUseCase,
+		CreateTaskUseCase:            createTaskUseCase,
+		MoveTaskUseCase:              moveTaskUseCase,
+		UpdateTaskUseCase:            updateTaskUseCase,
+		TrackSessionsUseCase:         trackSessionsUseCase,
+		GetActiveSessionBoardUseCase: getActiveSessionBoardUseCase,
+		SyncSessionBoardUseCase:      syncSessionBoardUseCase,
 	}
 	return container, nil
 }
@@ -63,6 +83,12 @@ type Container struct {
 	// Domain Services
 	ValidationService *service.ValidationService
 	BoardService      *service.BoardService
+	SessionTracker    service.SessionTracker
+	VCSProvider       service.VCSProvider
+	ChangeWatcher     service.ChangeWatcher
+
+	// Strategies
+	BoardSyncStrategies []strategy.BoardSyncStrategy
 
 	// Use Cases - Board
 	CreateBoardUseCase *board.CreateBoardUseCase
@@ -76,6 +102,11 @@ type Container struct {
 	CreateTaskUseCase *task.CreateTaskUseCase
 	MoveTaskUseCase   *task.MoveTaskUseCase
 	UpdateTaskUseCase *task.UpdateTaskUseCase
+
+	// Use Cases - Session
+	TrackSessionsUseCase         *session.TrackSessionsUseCase
+	GetActiveSessionBoardUseCase *session.GetActiveSessionBoardUseCase
+	SyncSessionBoardUseCase      *session.SyncSessionBoardUseCase
 }
 
 func ProvideConfig() (*config.Config, error) {
@@ -99,4 +130,31 @@ func ProvideBoardService(
 	validationService *service.ValidationService,
 ) *service.BoardService {
 	return service.NewBoardService(boardRepo, validationService)
+}
+
+func ProvideSessionTracker() service.SessionTracker {
+	return external.NewTmuxSessionTracker()
+}
+
+func ProvideVCSProvider() service.VCSProvider {
+	return external.NewGitVCSProvider()
+}
+
+func ProvideChangeWatcher() (service.ChangeWatcher, error) {
+	return external.NewFSNotifyWatcher()
+}
+
+func ProvideBoardSyncStrategies(
+	vcsProvider service.VCSProvider,
+	cfg *config.Config,
+) []strategy.BoardSyncStrategy {
+	strategies := make([]strategy.BoardSyncStrategy, 0)
+
+	gitStrategy := strategy.NewGitRepoSyncStrategy(vcsProvider)
+	strategies = append(strategies, gitStrategy)
+
+	generalStrategy := strategy.NewGeneralSyncStrategy(cfg.SessionTracking.GeneralBoardName)
+	strategies = append(strategies, generalStrategy)
+
+	return strategies
 }
