@@ -75,3 +75,11 @@ func TaskToDTO(task *entity.Task) TaskDTO {
 		IsOverdue:     task.IsOverdue(),
 	}
 }
+
+// TaskToDTOWithPath converts a Task entity to TaskDTO with file path and column name
+func TaskToDTOWithPath(task *entity.Task, filePath string, columnName string) TaskDTO {
+	dto := TaskToDTO(task)
+	dto.FilePath = filePath
+	dto.ColumnName = columnName
+	return dto
+}

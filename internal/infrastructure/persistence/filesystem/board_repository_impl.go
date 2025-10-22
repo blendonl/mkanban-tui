@@ -8,6 +8,7 @@ import (
 
 	"mkanban/internal/domain/entity"
 	"mkanban/internal/domain/repository"
+	"mkanban/internal/domain/valueobject"
 	"mkanban/internal/infrastructure/persistence/mapper"
 	"mkanban/internal/infrastructure/serialization"
 	"mkanban/pkg/filesystem"
@@ -354,7 +355,14 @@ func (r *BoardRepositoryImpl) loadTask(boardID, columnName, taskFolderName strin
 		return nil, fmt.Errorf("failed to parse task metadata: %w", err)
 	}
 
-	return mapper.TaskFromStorage(doc)
+	// Parse TaskID from folder name (which has format PREFIX-NUMBER-slug)
+	// This ensures we preserve the full TaskID including the slug
+	taskID, err := valueobject.ParseTaskID(taskFolderName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse task ID from folder name %s: %w", taskFolderName, err)
+	}
+
+	return mapper.TaskFromStorage(doc, taskID)
 }
 
 // cleanupOldColumns removes column directories that no longer exist in the board

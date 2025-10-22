@@ -16,6 +16,8 @@ type TaskDTO struct {
 	DueDate       *time.Time `json:"due_date,omitempty"`
 	CompletedDate *time.Time `json:"completed_date,omitempty"`
 	IsOverdue     bool       `json:"is_overdue"`
+	FilePath      string     `json:"file_path,omitempty"` // Optional: path to task.md file
+	ColumnName    string     `json:"column_name,omitempty"` // Optional: name of the column containing the task
 }
 
 // CreateTaskRequest represents a request to create a task

@@ -24,7 +24,7 @@ type TaskStorage struct {
 // TaskToStorage converts a Task entity to storage format
 func TaskToStorage(task *entity.Task) (map[string]interface{}, string, error) {
 	storage := TaskStorage{
-		ID:            task.ID().String(),
+		ID:            task.ID().ShortID(), // Store only PREFIX-NUMBER in metadata
 		Title:         task.Title(),
 		Created:       task.CreatedAt(),
 		Modified:      task.ModifiedAt(),
@@ -62,15 +62,13 @@ func TaskToStorage(task *entity.Task) (map[string]interface{}, string, error) {
 }
 
 // TaskFromStorage converts storage format to Task entity
-func TaskFromStorage(doc *serialization.FrontmatterDocument) (*entity.Task, error) {
-	// Parse task ID
-	taskIDStr := doc.GetString("id")
-	if taskIDStr == "" {
-		return nil, fmt.Errorf("missing task ID")
-	}
-	taskID, err := valueobject.ParseTaskID(taskIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid task ID: %w", err)
+// The taskID parameter comes from the folder name (PREFIX-NUMBER-slug format)
+// while the metadata contains only the short ID (PREFIX-NUMBER)
+func TaskFromStorage(doc *serialization.FrontmatterDocument, taskID *valueobject.TaskID) (*entity.Task, error) {
+	// Validate that the short ID from metadata matches the provided taskID
+	shortID := doc.GetString("id")
+	if shortID != "" && shortID != taskID.ShortID() {
+		return nil, fmt.Errorf("task ID mismatch: metadata has %s but folder indicates %s", shortID, taskID.ShortID())
 	}
 
 	// Get title from metadata

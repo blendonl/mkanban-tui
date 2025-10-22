@@ -44,6 +44,7 @@ func InitializeContainer() (*Container, error) {
 	createTaskUseCase := task.NewCreateTaskUseCase(boardService)
 	moveTaskUseCase := task.NewMoveTaskUseCase(boardService)
 	updateTaskUseCase := task.NewUpdateTaskUseCase(boardService)
+	listTasksUseCase := task.NewListTasksUseCase(boardRepository, config)
 	syncSessionBoardUseCase := session.NewSyncSessionBoardUseCase(boardRepository, boardService, validationService, v)
 	trackSessionsUseCase := session.NewTrackSessionsUseCase(sessionTracker, syncSessionBoardUseCase)
 	getActiveSessionBoardUseCase := session.NewGetActiveSessionBoardUseCase(sessionTracker, boardRepository, v)
@@ -63,6 +64,7 @@ func InitializeContainer() (*Container, error) {
 		CreateTaskUseCase:            createTaskUseCase,
 		MoveTaskUseCase:              moveTaskUseCase,
 		UpdateTaskUseCase:            updateTaskUseCase,
+		ListTasksUseCase:             listTasksUseCase,
 		TrackSessionsUseCase:         trackSessionsUseCase,
 		GetActiveSessionBoardUseCase: getActiveSessionBoardUseCase,
 		SyncSessionBoardUseCase:      syncSessionBoardUseCase,
@@ -102,6 +104,7 @@ type Container struct {
 	CreateTaskUseCase *task.CreateTaskUseCase
 	MoveTaskUseCase   *task.MoveTaskUseCase
 	UpdateTaskUseCase *task.UpdateTaskUseCase
+	ListTasksUseCase  *task.ListTasksUseCase
 
 	// Use Cases - Session
 	TrackSessionsUseCase         *session.TrackSessionsUseCase

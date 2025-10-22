@@ -48,6 +48,7 @@ type Container struct {
 	CreateTaskUseCase *task.CreateTaskUseCase
 	MoveTaskUseCase   *task.MoveTaskUseCase
 	UpdateTaskUseCase *task.UpdateTaskUseCase
+	ListTasksUseCase  *task.ListTasksUseCase
 
 	// Use Cases - Session
 	TrackSessionsUseCase        *session.TrackSessionsUseCase
@@ -86,6 +87,7 @@ func InitializeContainer() (*Container, error) {
 		task.NewCreateTaskUseCase,
 		task.NewMoveTaskUseCase,
 		task.NewUpdateTaskUseCase,
+		task.NewListTasksUseCase,
 
 		// Use Cases - Session
 		session.NewTrackSessionsUseCase,

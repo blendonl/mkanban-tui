@@ -14,16 +14,16 @@ import (
 
 // SessionManager manages session tracking and board synchronization
 type SessionManager struct {
-	config             *config.Config
-	trackSessionsUC    *session.TrackSessionsUseCase
-	sessionTracker     service.SessionTracker
-	changeWatcher      service.ChangeWatcher
-	strategies         []strategy.BoardSyncStrategy
-	activeSession      *entity.Session
-	watchedPaths       map[string]bool
-	mu                 sync.RWMutex
-	stopChan           chan struct{}
-	stopped            bool
+	config          *config.Config
+	trackSessionsUC *session.TrackSessionsUseCase
+	sessionTracker  service.SessionTracker
+	changeWatcher   service.ChangeWatcher
+	strategies      []strategy.BoardSyncStrategy
+	activeSession   *entity.Session
+	watchedPaths    map[string]bool
+	mu              sync.RWMutex
+	stopChan        chan struct{}
+	stopped         bool
 }
 
 // NewSessionManager creates a new SessionManager

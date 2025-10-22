@@ -110,5 +110,43 @@ func (uc *SyncSessionBoardUseCase) getOrCreateBoard(
 		return nil, fmt.Errorf("failed to create board: %w", err)
 	}
 
+	// Add default columns
+	if err := uc.addDefaultColumns(board); err != nil {
+		return nil, fmt.Errorf("failed to add default columns: %w", err)
+	}
+
+	// Save the board with columns
+	if err := uc.boardRepo.Save(ctx, board); err != nil {
+		return nil, fmt.Errorf("failed to save board with columns: %w", err)
+	}
+
 	return board, nil
+}
+
+// addDefaultColumns adds the default kanban columns to a new board
+func (uc *SyncSessionBoardUseCase) addDefaultColumns(board *entity.Board) error {
+	// Default columns for a kanban board
+	defaultColumns := []struct {
+		name        string
+		description string
+		order       int
+		wipLimit    int
+	}{
+		{"To Do", "Tasks to be started", 0, 0},
+		{"In Progress", "Tasks currently being worked on", 1, 3},
+		{"Done", "Completed tasks", 2, 0},
+	}
+
+	for _, col := range defaultColumns {
+		column, err := entity.NewColumn(col.name, col.description, col.order, col.wipLimit, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create column %s: %w", col.name, err)
+		}
+
+		if err := board.AddColumn(column); err != nil {
+			return fmt.Errorf("failed to add column %s to board: %w", col.name, err)
+		}
+	}
+
+	return nil
 }
