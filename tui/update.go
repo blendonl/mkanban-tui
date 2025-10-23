@@ -14,6 +14,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Update horizontal scroll to keep focused column visible after resize
+		m.updateHorizontalScroll(m.calculateVisibleColumns())
 		return m, nil
 
 	case tea.KeyMsg:
@@ -53,13 +55,15 @@ func (m *Model) moveLeft() {
 		m.focusedColumn--
 		m.focusedTask = 0
 		m.clampTaskFocus()
-		// Update scroll for new column
+		// Update vertical scroll for new column
 		availableTaskHeight := m.height - 8
 		maxVisibleTasks := availableTaskHeight / 6
 		if maxVisibleTasks < 1 {
 			maxVisibleTasks = 1
 		}
 		m.updateScroll(maxVisibleTasks)
+		// Update horizontal scroll to keep column visible
+		m.updateHorizontalScroll(m.calculateVisibleColumns())
 	}
 }
 
@@ -69,14 +73,30 @@ func (m *Model) moveRight() {
 		m.focusedColumn++
 		m.focusedTask = 0
 		m.clampTaskFocus()
-		// Update scroll for new column
+		// Update vertical scroll for new column
 		availableTaskHeight := m.height - 8
 		maxVisibleTasks := availableTaskHeight / 6
 		if maxVisibleTasks < 1 {
 			maxVisibleTasks = 1
 		}
 		m.updateScroll(maxVisibleTasks)
+		// Update horizontal scroll to keep column visible
+		m.updateHorizontalScroll(m.calculateVisibleColumns())
 	}
+}
+
+// calculateVisibleColumns returns how many columns can fit in the terminal width
+func (m *Model) calculateVisibleColumns() int {
+	const minColumnWidth = 30
+	const columnSpacing = 2
+	columnWidthWithSpacing := minColumnWidth + columnSpacing
+	indicatorWidth := 5
+	availableWidthForColumns := m.width - (indicatorWidth * 2)
+	maxVisibleColumns := availableWidthForColumns / columnWidthWithSpacing
+	if maxVisibleColumns < 1 {
+		maxVisibleColumns = 1
+	}
+	return maxVisibleColumns
 }
 
 // moveUp moves focus to the task above
@@ -152,13 +172,15 @@ func (m *Model) moveTask() {
 	m.focusedTask = len(m.board.Columns[m.focusedColumn].Tasks) - 1
 	m.clampTaskFocus()
 
-	// Update scroll for new position
+	// Update vertical scroll for new position
 	availableTaskHeight := m.height - 8
 	maxVisibleTasks := availableTaskHeight / 6
 	if maxVisibleTasks < 1 {
 		maxVisibleTasks = 1
 	}
 	m.updateScroll(maxVisibleTasks)
+	// Update horizontal scroll to keep column visible
+	m.updateHorizontalScroll(m.calculateVisibleColumns())
 }
 
 // addTask adds a new task to the current column

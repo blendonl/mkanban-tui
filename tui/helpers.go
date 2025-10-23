@@ -7,43 +7,42 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"mkanban/internal/application/dto"
+	"mkanban/internal/infrastructure/config"
 	"mkanban/tui/style"
 )
 
 // getPriorityIcon returns an icon and color based on priority level
 func getPriorityIcon(priority string) string {
 	switch strings.ToLower(priority) {
-	case "high":
-		return "⚠️"
-	case "medium":
-		return "🔔"
-	case "low":
-		return "🔹"
+	case "high", "medium", "low":
+		return "⚫"
 	default:
 		return "⚪"
 	}
 }
 
 // getPriorityColor returns a color based on priority level
-func getPriorityColor(priority string) lipgloss.Color {
+func getPriorityColor(priority string, cfg *config.Config) lipgloss.Color {
+	priorityColors := cfg.TUI.Styles.Priority
 	switch strings.ToLower(priority) {
 	case "high":
-		return lipgloss.Color("#FF6B6B")
+		return lipgloss.Color(priorityColors.High)
 	case "medium":
-		return lipgloss.Color("#FFE66D")
+		return lipgloss.Color(priorityColors.Medium)
 	case "low":
-		return lipgloss.Color("#95E1D3")
+		return lipgloss.Color(priorityColors.Low)
 	default:
-		return lipgloss.Color("#999999")
+		return lipgloss.Color(priorityColors.Default)
 	}
 }
 
 // formatDueDate formats the due date with relative time and returns the formatted string and style color
-func formatDueDate(dueDate *time.Time, isOverdue bool) (string, lipgloss.Color) {
+func formatDueDate(dueDate *time.Time, isOverdue bool, cfg *config.Config) (string, lipgloss.Color) {
 	if dueDate == nil {
 		return "", lipgloss.Color("")
 	}
 
+	dueDateColors := cfg.TUI.Styles.DueDateUrgency
 	now := time.Now()
 	diff := dueDate.Sub(now)
 
@@ -60,26 +59,26 @@ func formatDueDate(dueDate *time.Time, isOverdue bool) (string, lipgloss.Color) 
 		} else {
 			relativeTime = fmt.Sprintf("overdue %d days", days)
 		}
-		color = lipgloss.Color("#FF6B6B")
+		color = lipgloss.Color(dueDateColors.Overdue)
 		prefix = "⚠️ "
 	} else {
 		days := int(diff.Hours() / 24)
 
 		if days == 0 {
 			relativeTime = "due today"
-			color = lipgloss.Color("#FFE66D")
+			color = lipgloss.Color(dueDateColors.DueSoon)
 		} else if days == 1 {
 			relativeTime = "due tomorrow"
-			color = lipgloss.Color("#FFE66D")
+			color = lipgloss.Color(dueDateColors.DueSoon)
 		} else if days <= 3 {
 			relativeTime = fmt.Sprintf("due in %d days", days)
-			color = lipgloss.Color("#FFE66D")
+			color = lipgloss.Color(dueDateColors.DueSoon)
 		} else if days <= 7 {
 			relativeTime = fmt.Sprintf("due in %d days", days)
-			color = lipgloss.Color("#A8DADC")
+			color = lipgloss.Color(dueDateColors.Upcoming)
 		} else {
 			relativeTime = fmt.Sprintf("due in %d days", days)
-			color = lipgloss.Color("#999999")
+			color = lipgloss.Color(dueDateColors.FarFuture)
 		}
 		prefix = ""
 	}
@@ -149,7 +148,7 @@ func truncateDescription(desc string, maxLen int) string {
 }
 
 // renderTaskCard renders a complete task card with all components
-func renderTaskCard(task dto.TaskDTO, width int, isSelected bool) string {
+func renderTaskCard(task dto.TaskDTO, width int, isSelected bool, cfg *config.Config) string {
 	var lines []string
 
 	// Calculate content width (account for padding and borders)
@@ -166,7 +165,7 @@ func renderTaskCard(task dto.TaskDTO, width int, isSelected bool) string {
 		title = title[:titleMaxWidth-3] + "..."
 	}
 
-	priorityColor := getPriorityColor(task.Priority)
+	priorityColor := getPriorityColor(task.Priority, cfg)
 	titleLine := lipgloss.NewStyle().
 		Foreground(priorityColor).
 		Bold(true).
@@ -200,7 +199,7 @@ func renderTaskCard(task dto.TaskDTO, width int, isSelected bool) string {
 
 	// Line 4: Due date (if exists)
 	if task.DueDate != nil {
-		dueDateStr, dueDateColor := formatDueDate(task.DueDate, task.IsOverdue)
+		dueDateStr, dueDateColor := formatDueDate(task.DueDate, task.IsOverdue, cfg)
 		if dueDateStr != "" {
 			dueDateStyle := style.DueDateStyle.Foreground(dueDateColor)
 			if task.IsOverdue {

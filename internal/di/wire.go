@@ -121,8 +121,9 @@ func ProvideValidationService(boardRepo repository.BoardRepository) *service.Val
 func ProvideBoardService(
 	boardRepo repository.BoardRepository,
 	validationService *service.ValidationService,
+	cfg *config.Config,
 ) *service.BoardService {
-	return service.NewBoardService(boardRepo, validationService)
+	return service.NewBoardService(boardRepo, validationService, cfg)
 }
 
 func ProvideSessionTracker() service.SessionTracker {

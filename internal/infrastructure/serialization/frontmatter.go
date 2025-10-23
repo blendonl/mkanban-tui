@@ -141,3 +141,79 @@ func (d *FrontmatterDocument) GetStringSlice(key string) []string {
 	}
 	return []string{}
 }
+
+// MarkdownDocument represents a markdown document with title and content
+type MarkdownDocument struct {
+	Title   string
+	Content string
+}
+
+// ParseMarkdownWithTitle parses a markdown document expecting an H1 title
+func ParseMarkdownWithTitle(data []byte) (*MarkdownDocument, error) {
+	content := string(data)
+	lines := strings.Split(content, "\n")
+
+	doc := &MarkdownDocument{}
+
+	if len(lines) == 0 {
+		return doc, nil
+	}
+
+	// Check if first line is H1
+	if strings.HasPrefix(strings.TrimSpace(lines[0]), "# ") {
+		doc.Title = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[0]), "# "))
+
+		// Skip empty lines after title
+		startIdx := 1
+		for startIdx < len(lines) && strings.TrimSpace(lines[startIdx]) == "" {
+			startIdx++
+		}
+
+		// Join remaining lines as content
+		if startIdx < len(lines) {
+			doc.Content = strings.TrimSpace(strings.Join(lines[startIdx:], "\n"))
+		}
+	} else {
+		// No H1 found, entire content is description
+		doc.Content = strings.TrimSpace(content)
+	}
+
+	return doc, nil
+}
+
+// SerializeMarkdownWithTitle serializes a markdown document with H1 title
+func SerializeMarkdownWithTitle(title, content string) []byte {
+	var buf bytes.Buffer
+
+	if title != "" {
+		buf.WriteString("# ")
+		buf.WriteString(title)
+		buf.WriteString("\n\n")
+	}
+
+	if content != "" {
+		buf.WriteString(content)
+		if !strings.HasSuffix(content, "\n") {
+			buf.WriteString("\n")
+		}
+	}
+
+	return buf.Bytes()
+}
+
+// SerializeYaml serializes data to YAML format
+func SerializeYaml(data interface{}) ([]byte, error) {
+	yamlData, err := yaml.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal YAML: %w", err)
+	}
+	return yamlData, nil
+}
+
+// ParseYaml parses YAML data into the provided target
+func ParseYaml(data []byte, target interface{}) error {
+	if err := yaml.Unmarshal(data, target); err != nil {
+		return fmt.Errorf("failed to unmarshal YAML: %w", err)
+	}
+	return nil
+}

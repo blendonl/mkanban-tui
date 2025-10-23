@@ -20,6 +20,7 @@ var (
 	OverdueStyle         lipgloss.Style
 	TaskCardStyle        lipgloss.Style
 	SelectedTaskCardStyle lipgloss.Style
+	ScrollIndicatorStyle  lipgloss.Style
 )
 
 // InitStyles initializes the styles from config
@@ -77,37 +78,60 @@ func InitStyles(cfg *config.Config) {
 		HelpStyle = HelpStyle.Foreground(lipgloss.Color(styles.Help.Foreground))
 	}
 
-	// Task card component styles (with default styling)
+	// Task card component styles
 	DescriptionStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888")).
-		Italic(true).
-		Padding(0, 0, 0, 2) // Indent slightly
+		Padding(0, 0, 0, styles.Description.PaddingHorizontal)
+	if styles.Description.Foreground != "" {
+		DescriptionStyle = DescriptionStyle.Foreground(lipgloss.Color(styles.Description.Foreground))
+	}
+	if styles.Description.Italic {
+		DescriptionStyle = DescriptionStyle.Italic(true)
+	}
 
 	TagStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#A8DADC")).
-		Padding(0, 0, 0, 2)
+		Padding(0, 0, 0, styles.Tag.PaddingHorizontal)
+	if styles.Tag.Foreground != "" {
+		TagStyle = TagStyle.Foreground(lipgloss.Color(styles.Tag.Foreground))
+	}
 
 	DueDateStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#999999")).
-		Padding(0, 0, 0, 2)
+		Padding(0, 0, 0, styles.DueDate.PaddingHorizontal)
+	if styles.DueDate.Foreground != "" {
+		DueDateStyle = DueDateStyle.Foreground(lipgloss.Color(styles.DueDate.Foreground))
+	}
 
 	OverdueStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF6B6B")).
-		Bold(true).
-		Padding(0, 0, 0, 2)
+		Padding(0, 0, 0, styles.Overdue.PaddingHorizontal)
+	if styles.Overdue.Foreground != "" {
+		OverdueStyle = OverdueStyle.Foreground(lipgloss.Color(styles.Overdue.Foreground))
+	}
+	if styles.Overdue.Bold {
+		OverdueStyle = OverdueStyle.Bold(true)
+	}
 
 	// Task card container styles
 	TaskCardStyle = lipgloss.NewStyle().
 		Padding(0, 1).
 		MarginBottom(1).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#444444"))
+		BorderForeground(lipgloss.Color(styles.TaskCard.BorderColor))
 
 	SelectedTaskCardStyle = lipgloss.NewStyle().
 		Padding(0, 1).
 		MarginBottom(1).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#A8DADC"))
+		BorderForeground(lipgloss.Color(styles.SelectedTaskCard.BorderColor))
+
+	// Scroll indicator style
+	ScrollIndicatorStyle = lipgloss.NewStyle().
+		Italic(true).
+		Align(lipgloss.Center)
+	if styles.ScrollIndicator.Foreground != "" {
+		ScrollIndicatorStyle = ScrollIndicatorStyle.Foreground(lipgloss.Color(styles.ScrollIndicator.Foreground))
+	}
+	if styles.ScrollIndicator.Bold {
+		ScrollIndicatorStyle = ScrollIndicatorStyle.Bold(true)
+	}
 }
 
 // getBorder returns the border style based on the name

@@ -29,7 +29,7 @@ func InitializeContainer() (*Container, error) {
 	}
 	boardRepository := ProvideBoardRepository(config)
 	validationService := ProvideValidationService(boardRepository)
-	boardService := ProvideBoardService(boardRepository, validationService)
+	boardService := ProvideBoardService(boardRepository, validationService, config)
 	sessionTracker := ProvideSessionTracker()
 	vcsProvider := ProvideVCSProvider()
 	changeWatcher, err := ProvideChangeWatcher()
@@ -131,8 +131,9 @@ func ProvideValidationService(boardRepo repository.BoardRepository) *service.Val
 func ProvideBoardService(
 	boardRepo repository.BoardRepository,
 	validationService *service.ValidationService,
+	cfg *config.Config,
 ) *service.BoardService {
-	return service.NewBoardService(boardRepo, validationService)
+	return service.NewBoardService(boardRepo, validationService, cfg)
 }
 
 func ProvideSessionTracker() service.SessionTracker {

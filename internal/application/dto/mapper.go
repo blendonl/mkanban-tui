@@ -48,7 +48,7 @@ func ColumnToDTO(column *entity.Column) ColumnDTO {
 	}
 
 	return ColumnDTO{
-		Name:        column.Name(),
+		Name:        column.DisplayName(), // Use display name for UI
 		Description: column.Description(),
 		Order:       column.Order(),
 		WIPLimit:    column.WIPLimit(),

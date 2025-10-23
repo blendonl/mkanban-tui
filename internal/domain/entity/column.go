@@ -7,7 +7,8 @@ import (
 
 // Column represents a board column containing tasks
 type Column struct {
-	name        string
+	name        string // Normalized folder name (lowercase, dashes)
+	displayName string // Human-readable display name
 	description string
 	order       int
 	wipLimit    int
@@ -29,6 +30,7 @@ func NewColumn(name string, description string, order int, wipLimit int, color *
 	now := time.Now()
 	return &Column{
 		name:        name,
+		displayName: name, // Default display name to the name
 		description: description,
 		order:       order,
 		wipLimit:    wipLimit,
@@ -39,9 +41,40 @@ func NewColumn(name string, description string, order int, wipLimit int, color *
 	}, nil
 }
 
-// Name returns the column name
+// NewColumnWithDisplayName creates a new Column entity with a custom display name
+func NewColumnWithDisplayName(name string, displayName string, description string, order int, wipLimit int, color *valueobject.Color) (*Column, error) {
+	if name == "" {
+		return nil, ErrEmptyColumnName
+	}
+	if displayName == "" {
+		displayName = name
+	}
+	if wipLimit < 0 {
+		return nil, ErrInvalidWIPLimit
+	}
+
+	now := time.Now()
+	return &Column{
+		name:        name,
+		displayName: displayName,
+		description: description,
+		order:       order,
+		wipLimit:    wipLimit,
+		color:       color,
+		tasks:       make([]*Task, 0),
+		createdAt:   now,
+		modifiedAt:  now,
+	}, nil
+}
+
+// Name returns the column name (normalized folder name)
 func (c *Column) Name() string {
 	return c.name
+}
+
+// DisplayName returns the column display name
+func (c *Column) DisplayName() string {
+	return c.displayName
 }
 
 // Description returns the column description
@@ -86,12 +119,23 @@ func (c *Column) ModifiedAt() time.Time {
 	return c.modifiedAt
 }
 
-// UpdateName updates the column name
+// UpdateName updates the column name (both normalized and display)
 func (c *Column) UpdateName(name string) error {
 	if name == "" {
 		return ErrEmptyColumnName
 	}
 	c.name = name
+	c.displayName = name
+	c.modifiedAt = time.Now()
+	return nil
+}
+
+// UpdateDisplayName updates only the column display name
+func (c *Column) UpdateDisplayName(displayName string) error {
+	if displayName == "" {
+		return ErrEmptyColumnName
+	}
+	c.displayName = displayName
 	c.modifiedAt = time.Now()
 	return nil
 }

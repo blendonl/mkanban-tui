@@ -14,6 +14,7 @@ type Task struct {
 	status        valueobject.Status
 	tags          []string
 	metadata      map[string]string
+	parentID      *valueobject.TaskID
 	createdAt     time.Time
 	modifiedAt    time.Time
 	dueDate       *time.Time
@@ -113,6 +114,22 @@ func (t *Task) CompletedDate() *time.Time {
 	}
 	completedCopy := *t.completedDate
 	return &completedCopy
+}
+
+// ParentID returns the parent task ID if this is a subtask
+func (t *Task) ParentID() *valueobject.TaskID {
+	return t.parentID
+}
+
+// SetParentID sets the parent task ID for this subtask
+func (t *Task) SetParentID(parentID *valueobject.TaskID) {
+	t.parentID = parentID
+	t.modifiedAt = time.Now()
+}
+
+// IsSubtask checks if this task has a parent
+func (t *Task) IsSubtask() bool {
+	return t.parentID != nil
 }
 
 // UpdateTitle updates the task title

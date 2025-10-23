@@ -11,7 +11,7 @@ import (
 // TaskStorage represents task storage format
 type TaskStorage struct {
 	ID            string     `yaml:"id"`
-	Title         string     `yaml:"title"`
+	ParentID      string     `yaml:"parent_id,omitempty"`
 	Created       time.Time  `yaml:"created"`
 	Modified      time.Time  `yaml:"modified"`
 	DueDate       *time.Time `yaml:"due_date,omitempty"`
@@ -22,10 +22,10 @@ type TaskStorage struct {
 }
 
 // TaskToStorage converts a Task entity to storage format
-func TaskToStorage(task *entity.Task) (map[string]interface{}, string, error) {
-	storage := TaskStorage{
+// Returns: metadata (for metadata.yml), markdownContent (for task.md), error
+func TaskToStorage(task *entity.Task) (*TaskStorage, []byte, error) {
+	storage := &TaskStorage{
 		ID:            task.ID().ShortID(), // Store only PREFIX-NUMBER in metadata
-		Title:         task.Title(),
 		Created:       task.CreatedAt(),
 		Modified:      task.ModifiedAt(),
 		DueDate:       task.DueDate(),
@@ -35,50 +35,39 @@ func TaskToStorage(task *entity.Task) (map[string]interface{}, string, error) {
 		Tags:          task.Tags(),
 	}
 
-	frontmatter := map[string]interface{}{
-		"id":       storage.ID,
-		"title":    storage.Title,
-		"created":  storage.Created.Format(time.RFC3339),
-		"modified": storage.Modified.Format(time.RFC3339),
-		"priority": storage.Priority,
-		"status":   storage.Status,
+	// Store parent ID if this is a subtask
+	if task.ParentID() != nil {
+		storage.ParentID = task.ParentID().ShortID()
 	}
 
-	if storage.DueDate != nil {
-		frontmatter["due_date"] = storage.DueDate.Format(time.RFC3339)
-	}
+	// Serialize markdown with title and description
+	markdownContent := serialization.SerializeMarkdownWithTitle(task.Title(), task.Description())
 
-	if storage.CompletedDate != nil {
-		frontmatter["completed_date"] = storage.CompletedDate.Format(time.RFC3339)
-	}
-
-	if len(storage.Tags) > 0 {
-		frontmatter["tags"] = storage.Tags
-	}
-
-	content := task.Description()
-
-	return frontmatter, content, nil
+	return storage, markdownContent, nil
 }
 
 // TaskFromStorage converts storage format to Task entity
 // The taskID parameter comes from the folder name (PREFIX-NUMBER-slug format)
 // while the metadata contains only the short ID (PREFIX-NUMBER)
-func TaskFromStorage(doc *serialization.FrontmatterDocument, taskID *valueobject.TaskID) (*entity.Task, error) {
+// metadata is the parsed TaskStorage struct, markdownContent is the raw markdown file
+func TaskFromStorage(metadata *TaskStorage, markdownContent []byte, taskID *valueobject.TaskID) (*entity.Task, error) {
 	// Validate that the short ID from metadata matches the provided taskID
-	shortID := doc.GetString("id")
-	if shortID != "" && shortID != taskID.ShortID() {
-		return nil, fmt.Errorf("task ID mismatch: metadata has %s but folder indicates %s", shortID, taskID.ShortID())
+	if metadata.ID != "" && metadata.ID != taskID.ShortID() {
+		return nil, fmt.Errorf("task ID mismatch: metadata has %s but folder indicates %s", metadata.ID, taskID.ShortID())
 	}
 
-	// Get title from metadata
-	title := doc.GetString("title")
-	if title == "" {
-		return nil, fmt.Errorf("missing task title")
+	// Parse markdown to get title and description
+	mdDoc, err := serialization.ParseMarkdownWithTitle(markdownContent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse markdown: %w", err)
+	}
+
+	if mdDoc.Title == "" {
+		return nil, fmt.Errorf("missing task title in markdown")
 	}
 
 	// Parse priority
-	priorityStr := doc.GetString("priority")
+	priorityStr := metadata.Priority
 	if priorityStr == "" {
 		priorityStr = "none"
 	}
@@ -88,7 +77,7 @@ func TaskFromStorage(doc *serialization.FrontmatterDocument, taskID *valueobject
 	}
 
 	// Parse status
-	statusStr := doc.GetString("status")
+	statusStr := metadata.Status
 	if statusStr == "" {
 		statusStr = "todo"
 	}
@@ -98,28 +87,27 @@ func TaskFromStorage(doc *serialization.FrontmatterDocument, taskID *valueobject
 	}
 
 	// Create task
-	task, err := entity.NewTask(taskID, title, doc.Content, priority, status)
+	task, err := entity.NewTask(taskID, mdDoc.Title, mdDoc.Content, priority, status)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse dates (using reflection-like approach through frontmatter)
-	if createdStr := doc.GetString("created"); createdStr != "" {
-		// Already set in NewTask, but we could override if needed
-	}
-
 	// Parse optional dates
-	if dueDateStr := doc.GetString("due_date"); dueDateStr != "" {
-		dueDate, err := time.Parse(time.RFC3339, dueDateStr)
-		if err == nil {
-			_ = task.SetDueDate(dueDate)
-		}
+	if metadata.DueDate != nil {
+		_ = task.SetDueDate(*metadata.DueDate)
 	}
 
 	// Parse tags
-	tags := doc.GetStringSlice("tags")
-	for _, tag := range tags {
+	for _, tag := range metadata.Tags {
 		task.AddTag(tag)
+	}
+
+	// Parse parent ID if present
+	if metadata.ParentID != "" {
+		parentID, err := valueobject.ParseTaskID(metadata.ParentID)
+		if err == nil {
+			task.SetParentID(parentID)
+		}
 	}
 
 	return task, nil

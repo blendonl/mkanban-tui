@@ -43,12 +43,21 @@ type TUIConfig struct {
 
 // StylesConfig holds color and styling configuration
 type StylesConfig struct {
-	Column        ColumnStyle `yaml:"column"`
-	FocusedColumn ColumnStyle `yaml:"focused_column"`
-	ColumnTitle   TextStyle   `yaml:"column_title"`
-	Task          TextStyle   `yaml:"task"`
-	SelectedTask  TextStyle   `yaml:"selected_task"`
-	Help          TextStyle   `yaml:"help"`
+	Column            ColumnStyle       `yaml:"column"`
+	FocusedColumn     ColumnStyle       `yaml:"focused_column"`
+	ColumnTitle       TextStyle         `yaml:"column_title"`
+	Task              TextStyle         `yaml:"task"`
+	SelectedTask      TextStyle         `yaml:"selected_task"`
+	Help              TextStyle         `yaml:"help"`
+	TaskCard          TaskCardStyle     `yaml:"task_card"`
+	SelectedTaskCard  TaskCardStyle     `yaml:"selected_task_card"`
+	Description       TextStyle         `yaml:"description"`
+	Tag               TextStyle         `yaml:"tag"`
+	DueDate           TextStyle         `yaml:"due_date"`
+	Overdue           TextStyle         `yaml:"overdue"`
+	Priority          PriorityColors    `yaml:"priority"`
+	DueDateUrgency    DueDateColors     `yaml:"due_date_urgency"`
+	ScrollIndicator   TextStyle         `yaml:"scroll_indicator"`
 }
 
 // ColumnStyle represents column styling
@@ -64,9 +73,31 @@ type TextStyle struct {
 	Foreground        string `yaml:"foreground,omitempty"`
 	Background        string `yaml:"background,omitempty"`
 	Bold              bool   `yaml:"bold,omitempty"`
+	Italic            bool   `yaml:"italic,omitempty"`
 	PaddingVertical   int    `yaml:"padding_vertical,omitempty"`
 	PaddingHorizontal int    `yaml:"padding_horizontal,omitempty"`
 	Align             string `yaml:"align,omitempty"`
+}
+
+// TaskCardStyle represents task card border styling
+type TaskCardStyle struct {
+	BorderColor string `yaml:"border_color"`
+}
+
+// PriorityColors holds colors for different priority levels
+type PriorityColors struct {
+	High    string `yaml:"high"`
+	Medium  string `yaml:"medium"`
+	Low     string `yaml:"low"`
+	Default string `yaml:"default"`
+}
+
+// DueDateColors holds colors for different due date urgency levels
+type DueDateColors struct {
+	Overdue   string `yaml:"overdue"`
+	DueSoon   string `yaml:"due_soon"`
+	Upcoming  string `yaml:"upcoming"`
+	FarFuture string `yaml:"far_future"`
 }
 
 // KeybindingsConfig holds keybinding configuration
@@ -217,6 +248,46 @@ func (l *Loader) createDefaultConfig() (*Config, error) {
 					Foreground:        "241",
 					PaddingVertical:   1,
 					PaddingHorizontal: 2,
+				},
+				TaskCard: TaskCardStyle{
+					BorderColor: "#444444",
+				},
+				SelectedTaskCard: TaskCardStyle{
+					BorderColor: "#A8DADC",
+				},
+				Description: TextStyle{
+					Foreground:        "#888888",
+					Italic:            true,
+					PaddingHorizontal: 2,
+				},
+				Tag: TextStyle{
+					Foreground:        "#A8DADC",
+					PaddingHorizontal: 2,
+				},
+				DueDate: TextStyle{
+					Foreground:        "#999999",
+					PaddingHorizontal: 2,
+				},
+				Overdue: TextStyle{
+					Foreground:        "#FF6B6B",
+					Bold:              true,
+					PaddingHorizontal: 2,
+				},
+				Priority: PriorityColors{
+					High:    "#FF6B6B",
+					Medium:  "#FFE66D",
+					Low:     "#95E1D3",
+					Default: "#999999",
+				},
+				DueDateUrgency: DueDateColors{
+					Overdue:   "#FF6B6B",
+					DueSoon:   "#FFE66D",
+					Upcoming:  "#A8DADC",
+					FarFuture: "#999999",
+				},
+				ScrollIndicator: TextStyle{
+					Foreground: "#999999",
+					Bold:       true,
 				},
 			},
 		},

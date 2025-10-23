@@ -6,6 +6,7 @@ import (
 	"mkanban/internal/domain/entity"
 	"mkanban/internal/domain/repository"
 	"mkanban/internal/domain/valueobject"
+	"mkanban/internal/infrastructure/config"
 	"mkanban/pkg/slug"
 )
 
@@ -13,16 +14,19 @@ import (
 type BoardService struct {
 	boardRepo         repository.BoardRepository
 	validationService *ValidationService
+	config            *config.Config
 }
 
 // NewBoardService creates a new BoardService
 func NewBoardService(
 	boardRepo repository.BoardRepository,
 	validationService *ValidationService,
+	cfg *config.Config,
 ) *BoardService {
 	return &BoardService{
 		boardRepo:         boardRepo,
 		validationService: validationService,
+		config:            cfg,
 	}
 }
 
@@ -85,7 +89,7 @@ func (s *BoardService) AddColumnToBoard(
 		return nil, err
 	}
 
-	// Check uniqueness within board
+	// Check uniqueness within board (check display names)
 	if err := s.validationService.ValidateUniqueColumnName(board, columnName, nil); err != nil {
 		return nil, err
 	}
@@ -95,8 +99,11 @@ func (s *BoardService) AddColumnToBoard(
 		return nil, err
 	}
 
-	// Create column
-	column, err := entity.NewColumn(columnName, description, order, wipLimit, color)
+	// Generate normalized folder name from display name
+	normalizedName := slug.Generate(columnName)
+
+	// Create column with both normalized and display names
+	column, err := entity.NewColumnWithDisplayName(normalizedName, columnName, description, order, wipLimit, color)
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +173,50 @@ func (s *BoardService) CreateTask(
 		return nil, nil, err
 	}
 
+	// Parse description for subtasks
+	subtaskTitles := ParseSubtasks(description)
+	if len(subtaskTitles) > 0 {
+		// Get the first column (Todo) for subtasks
+		var todoColumn *entity.Column
+		if board.ColumnCount() > 0 {
+			todoColumn, _ = board.GetColumnByIndex(0)
+		}
+
+		if todoColumn != nil {
+			updatedDescription := description
+
+			// Create a subtask for each checkbox
+			for _, subtaskTitle := range subtaskTitles {
+				// Generate subtask ID
+				subtaskSlug := slug.Generate(subtaskTitle)
+				subtaskID, err := board.GenerateNextTaskID(subtaskSlug)
+				if err != nil {
+					continue // Skip this subtask on error
+				}
+
+				// Create subtask
+				subtask, err := entity.NewTask(subtaskID, subtaskTitle, "", priority, valueobject.StatusTodo)
+				if err != nil {
+					continue // Skip this subtask on error
+				}
+
+				// Set parent ID
+				subtask.SetParentID(taskID)
+
+				// Add subtask to todo column
+				if err := todoColumn.AddTask(subtask); err != nil {
+					continue // Skip this subtask on error
+				}
+
+				// Update parent description with markdown link
+				updatedDescription = AddSubtaskLink(updatedDescription, subtaskTitle, subtaskID.String(), s.config.Storage.BoardsPath, board.ID(), todoColumn.Name())
+			}
+
+			// Update parent task description with links
+			task.UpdateDescription(updatedDescription)
+		}
+	}
+
 	// Save board
 	if err := s.boardRepo.Save(ctx, board); err != nil {
 		return nil, nil, fmt.Errorf("failed to save board: %w", err)
@@ -187,9 +238,49 @@ func (s *BoardService) MoveTask(
 		return nil, err
 	}
 
+	// Find the task being moved
+	task, _, err := board.FindTask(taskID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Move task
 	if err := board.MoveTask(taskID, targetColumnName); err != nil {
 		return nil, err
+	}
+
+	// If this task has a parent, update the parent's checkbox state
+	if task.IsSubtask() {
+		parentTask, _, err := board.FindTask(task.ParentID())
+		if err == nil {
+			// Determine checkbox state based on target column
+			var checkboxState CheckboxState
+			switch targetColumnName {
+			case "Done":
+				checkboxState = CheckboxDone
+			case "In Progress":
+				checkboxState = CheckboxInProgress
+			default:
+				checkboxState = CheckboxTodo
+			}
+
+			// Update the parent's description
+			updatedDescription := UpdateCheckboxState(
+				parentTask.Description(),
+				taskID.String(),
+				checkboxState,
+			)
+			parentTask.UpdateDescription(updatedDescription)
+
+			// Check if all subtasks are complete
+			if AllCheckboxesComplete(parentTask.Description()) {
+				// Move parent to Done column
+				doneColumn, err := board.GetColumn("Done")
+				if err == nil && doneColumn.CanAddTask() {
+					_ = board.MoveTask(task.ParentID(), "Done")
+				}
+			}
+		}
 	}
 
 	// Save board
@@ -229,6 +320,30 @@ func (s *BoardService) DeleteTask(
 	}
 
 	return board, nil
+}
+
+// CheckAndCompleteParent checks if all subtasks of a parent are complete
+// and moves the parent to Done if so
+func (s *BoardService) CheckAndCompleteParent(
+	ctx context.Context,
+	board *entity.Board,
+	parentTaskID *valueobject.TaskID,
+) error {
+	parentTask, _, err := board.FindTask(parentTaskID)
+	if err != nil {
+		return err
+	}
+
+	// Check if all subtasks are complete
+	if AllCheckboxesComplete(parentTask.Description()) {
+		// Move parent to Done column
+		doneColumn, err := board.GetColumn("Done")
+		if err == nil && doneColumn.CanAddTask() {
+			return board.MoveTask(parentTaskID, "Done")
+		}
+	}
+
+	return nil
 }
 
 // UpdateTask updates task details

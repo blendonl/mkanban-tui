@@ -92,7 +92,8 @@ func (v *ValidationService) ValidateUniqueBoardName(ctx context.Context, name st
 // ValidateUniqueColumnName checks if a column name is unique within a board
 func (v *ValidationService) ValidateUniqueColumnName(board *entity.Board, columnName string, excludeColumn *entity.Column) error {
 	for _, col := range board.Columns() {
-		if col.Name() == columnName && col != excludeColumn {
+		// Compare display names for uniqueness check
+		if col.DisplayName() == columnName && col != excludeColumn {
 			return entity.ErrColumnAlreadyExists
 		}
 	}

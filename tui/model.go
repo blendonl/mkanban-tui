@@ -8,13 +8,14 @@ import (
 
 // Model represents the TUI state
 type Model struct {
-	board         *dto.BoardDTO
-	container     *di.Container
-	focusedColumn int   // which column is currently selected
-	focusedTask   int   // which task in the current column is selected
-	scrollOffsets []int // scroll offset for each column
-	width         int
-	height        int
+	board                  *dto.BoardDTO
+	container              *di.Container
+	focusedColumn          int   // which column is currently selected
+	focusedTask            int   // which task in the current column is selected
+	scrollOffsets          []int // scroll offset for each column (vertical)
+	horizontalScrollOffset int   // horizontal scroll offset for columns
+	width                  int
+	height                 int
 }
 
 // NewModel creates a new TUI model
@@ -94,5 +95,39 @@ func (m *Model) updateScroll(viewportHeight int) {
 	}
 	if m.scrollOffsets[m.focusedColumn] < 0 {
 		m.scrollOffsets[m.focusedColumn] = 0
+	}
+}
+
+// Helper to update horizontal scroll to keep focused column visible
+func (m *Model) updateHorizontalScroll(visibleColumns int) {
+	if visibleColumns <= 0 {
+		visibleColumns = 1
+	}
+
+	totalColumns := len(m.board.Columns)
+	if totalColumns == 0 {
+		m.horizontalScrollOffset = 0
+		return
+	}
+
+	// Ensure focused column is visible
+	if m.focusedColumn < m.horizontalScrollOffset {
+		// Focused column is to the left of viewport
+		m.horizontalScrollOffset = m.focusedColumn
+	} else if m.focusedColumn >= m.horizontalScrollOffset+visibleColumns {
+		// Focused column is to the right of viewport
+		m.horizontalScrollOffset = m.focusedColumn - visibleColumns + 1
+	}
+
+	// Clamp horizontal scroll offset
+	maxScroll := totalColumns - visibleColumns
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.horizontalScrollOffset > maxScroll {
+		m.horizontalScrollOffset = maxScroll
+	}
+	if m.horizontalScrollOffset < 0 {
+		m.horizontalScrollOffset = 0
 	}
 }

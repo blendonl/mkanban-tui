@@ -118,10 +118,11 @@ func (b *Board) AddColumn(column *Column) error {
 	return nil
 }
 
-// RemoveColumn removes a column from the board
+// RemoveColumn removes a column from the board (accepts both normalized name and display name)
 func (b *Board) RemoveColumn(columnName string) (*Column, error) {
 	for i, column := range b.columns {
-		if column.Name() == columnName {
+		// Check both normalized name and display name
+		if column.Name() == columnName || column.DisplayName() == columnName {
 			// Check if column has tasks
 			if column.TaskCount() > 0 {
 				return nil, ErrColumnNotFound // Could create a specific error for this
@@ -136,10 +137,11 @@ func (b *Board) RemoveColumn(columnName string) (*Column, error) {
 	return nil, ErrColumnNotFound
 }
 
-// GetColumn retrieves a column by name
+// GetColumn retrieves a column by name (checks both normalized name and display name)
 func (b *Board) GetColumn(columnName string) (*Column, error) {
 	for _, column := range b.columns {
-		if column.Name() == columnName {
+		// Check both normalized name and display name for flexibility
+		if column.Name() == columnName || column.DisplayName() == columnName {
 			return column, nil
 		}
 	}
