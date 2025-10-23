@@ -12,6 +12,14 @@ var (
 	TaskStyle         lipgloss.Style
 	SelectedTaskStyle lipgloss.Style
 	HelpStyle         lipgloss.Style
+
+	// New task card component styles
+	DescriptionStyle      lipgloss.Style
+	TagStyle             lipgloss.Style
+	DueDateStyle         lipgloss.Style
+	OverdueStyle         lipgloss.Style
+	TaskCardStyle        lipgloss.Style
+	SelectedTaskCardStyle lipgloss.Style
 )
 
 // InitStyles initializes the styles from config
@@ -68,6 +76,38 @@ func InitStyles(cfg *config.Config) {
 	if styles.Help.Foreground != "" {
 		HelpStyle = HelpStyle.Foreground(lipgloss.Color(styles.Help.Foreground))
 	}
+
+	// Task card component styles (with default styling)
+	DescriptionStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#888888")).
+		Italic(true).
+		Padding(0, 0, 0, 2) // Indent slightly
+
+	TagStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#A8DADC")).
+		Padding(0, 0, 0, 2)
+
+	DueDateStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#999999")).
+		Padding(0, 0, 0, 2)
+
+	OverdueStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FF6B6B")).
+		Bold(true).
+		Padding(0, 0, 0, 2)
+
+	// Task card container styles
+	TaskCardStyle = lipgloss.NewStyle().
+		Padding(0, 1).
+		MarginBottom(1).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#444444"))
+
+	SelectedTaskCardStyle = lipgloss.NewStyle().
+		Padding(0, 1).
+		MarginBottom(1).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#A8DADC"))
 }
 
 // getBorder returns the border style based on the name

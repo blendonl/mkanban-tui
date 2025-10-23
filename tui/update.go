@@ -53,6 +53,13 @@ func (m *Model) moveLeft() {
 		m.focusedColumn--
 		m.focusedTask = 0
 		m.clampTaskFocus()
+		// Update scroll for new column
+		availableTaskHeight := m.height - 8
+		maxVisibleTasks := availableTaskHeight / 6
+		if maxVisibleTasks < 1 {
+			maxVisibleTasks = 1
+		}
+		m.updateScroll(maxVisibleTasks)
 	}
 }
 
@@ -62,6 +69,13 @@ func (m *Model) moveRight() {
 		m.focusedColumn++
 		m.focusedTask = 0
 		m.clampTaskFocus()
+		// Update scroll for new column
+		availableTaskHeight := m.height - 8
+		maxVisibleTasks := availableTaskHeight / 6
+		if maxVisibleTasks < 1 {
+			maxVisibleTasks = 1
+		}
+		m.updateScroll(maxVisibleTasks)
 	}
 }
 
@@ -69,6 +83,13 @@ func (m *Model) moveRight() {
 func (m *Model) moveUp() {
 	if m.focusedTask > 0 {
 		m.focusedTask--
+		// Update scroll to keep task visible
+		availableTaskHeight := m.height - 8
+		maxVisibleTasks := availableTaskHeight / 6
+		if maxVisibleTasks < 1 {
+			maxVisibleTasks = 1
+		}
+		m.updateScroll(maxVisibleTasks)
 	}
 }
 
@@ -77,6 +98,13 @@ func (m *Model) moveDown() {
 	taskCount := m.currentColumnTaskCount()
 	if m.focusedTask < taskCount-1 {
 		m.focusedTask++
+		// Update scroll to keep task visible
+		availableTaskHeight := m.height - 8
+		maxVisibleTasks := availableTaskHeight / 6
+		if maxVisibleTasks < 1 {
+			maxVisibleTasks = 1
+		}
+		m.updateScroll(maxVisibleTasks)
 	}
 }
 
@@ -114,10 +142,23 @@ func (m *Model) moveTask() {
 	// Update local state
 	m.board = updatedBoard
 
+	// Ensure scroll offsets array matches board columns
+	if len(m.scrollOffsets) != len(m.board.Columns) {
+		m.scrollOffsets = make([]int, len(m.board.Columns))
+	}
+
 	// Move focus to next column
 	m.focusedColumn++
 	m.focusedTask = len(m.board.Columns[m.focusedColumn].Tasks) - 1
 	m.clampTaskFocus()
+
+	// Update scroll for new position
+	availableTaskHeight := m.height - 8
+	maxVisibleTasks := availableTaskHeight / 6
+	if maxVisibleTasks < 1 {
+		maxVisibleTasks = 1
+	}
+	m.updateScroll(maxVisibleTasks)
 }
 
 // addTask adds a new task to the current column
@@ -148,8 +189,21 @@ func (m *Model) addTask() {
 
 	m.board = updatedBoard
 
+	// Ensure scroll offsets array matches board columns
+	if len(m.scrollOffsets) != len(m.board.Columns) {
+		m.scrollOffsets = make([]int, len(m.board.Columns))
+	}
+
 	// Focus the new task
 	m.focusedTask = len(m.board.Columns[m.focusedColumn].Tasks) - 1
+
+	// Update scroll to show the new task
+	availableTaskHeight := m.height - 8
+	maxVisibleTasks := availableTaskHeight / 6
+	if maxVisibleTasks < 1 {
+		maxVisibleTasks = 1
+	}
+	m.updateScroll(maxVisibleTasks)
 }
 
 // deleteTask removes the currently focused task
