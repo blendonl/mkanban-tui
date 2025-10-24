@@ -8,17 +8,25 @@ import (
 	"time"
 )
 
+// GitMetadata represents git-related task metadata
+type GitMetadata struct {
+	Branch          string `yaml:"branch,omitempty"`
+	IsCurrentBranch string `yaml:"is_current_branch,omitempty"`
+	RepoPath        string `yaml:"repo_path,omitempty"`
+}
+
 // TaskStorage represents task storage format
 type TaskStorage struct {
-	ID            string     `yaml:"id"`
-	ParentID      string     `yaml:"parent_id,omitempty"`
-	Created       time.Time  `yaml:"created"`
-	Modified      time.Time  `yaml:"modified"`
-	DueDate       *time.Time `yaml:"due_date,omitempty"`
-	CompletedDate *time.Time `yaml:"completed_date,omitempty"`
-	Priority      string     `yaml:"priority"`
-	Status        string     `yaml:"status"`
-	Tags          []string   `yaml:"tags,omitempty"`
+	ID            string       `yaml:"id"`
+	ParentID      string       `yaml:"parent_id,omitempty"`
+	Created       time.Time    `yaml:"created"`
+	Modified      time.Time    `yaml:"modified"`
+	DueDate       *time.Time   `yaml:"due_date,omitempty"`
+	CompletedDate *time.Time   `yaml:"completed_date,omitempty"`
+	Priority      string       `yaml:"priority"`
+	Status        string       `yaml:"status"`
+	Tags          []string     `yaml:"tags,omitempty"`
+	Git           *GitMetadata `yaml:"git,omitempty"`
 }
 
 // TaskToStorage converts a Task entity to storage format
@@ -38,6 +46,19 @@ func TaskToStorage(task *entity.Task) (*TaskStorage, []byte, error) {
 	// Store parent ID if this is a subtask
 	if task.ParentID() != nil {
 		storage.ParentID = task.ParentID().ShortID()
+	}
+
+	// Extract git metadata if present
+	gitBranch, hasGitBranch := task.GetMetadata("git_branch")
+	isCurrentBranch, hasIsCurrentBranch := task.GetMetadata("is_current_branch")
+	repoPath, hasRepoPath := task.GetMetadata("repo_path")
+
+	if hasGitBranch || hasIsCurrentBranch || hasRepoPath {
+		storage.Git = &GitMetadata{
+			Branch:          gitBranch,
+			IsCurrentBranch: isCurrentBranch,
+			RepoPath:        repoPath,
+		}
 	}
 
 	// Serialize markdown with title and description
@@ -107,6 +128,19 @@ func TaskFromStorage(metadata *TaskStorage, markdownContent []byte, taskID *valu
 		parentID, err := valueobject.ParseTaskID(metadata.ParentID)
 		if err == nil {
 			task.SetParentID(parentID)
+		}
+	}
+
+	// Parse git metadata if present
+	if metadata.Git != nil {
+		if metadata.Git.Branch != "" {
+			task.SetMetadata("git_branch", metadata.Git.Branch)
+		}
+		if metadata.Git.IsCurrentBranch != "" {
+			task.SetMetadata("is_current_branch", metadata.Git.IsCurrentBranch)
+		}
+		if metadata.Git.RepoPath != "" {
+			task.SetMetadata("repo_path", metadata.Git.RepoPath)
 		}
 	}
 

@@ -24,7 +24,6 @@ func main() {
 	loader, err := config.NewLoader()
 	if err != nil {
 		log.Fatalf("Failed to create config loader: %v", err)
-		log.Fatalf("Make sure you have a valid config file at %s", loader.ConfigPath())
 	}
 
 	cfg, err := loader.Load()
