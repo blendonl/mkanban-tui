@@ -148,3 +148,49 @@ func (g *GitVCSProvider) GetRefsPath(repoPath string) string {
 
 	return refsPath
 }
+
+// BranchExists checks if a branch with the given name exists
+func (g *GitVCSProvider) BranchExists(repoPath, branchName string) (bool, error) {
+	cmd := exec.Command("git", "rev-parse", "--verify", branchName)
+	cmd.Dir = repoPath
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	err := cmd.Run()
+	if err != nil {
+		// Branch doesn't exist
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// CheckoutBranch checks out an existing branch
+func (g *GitVCSProvider) CheckoutBranch(repoPath, branchName string) error {
+	cmd := exec.Command("git", "checkout", branchName)
+	cmd.Dir = repoPath
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout branch %s: %w - %s", branchName, err, stderr.String())
+	}
+
+	return nil
+}
+
+// CreateAndCheckoutBranch creates a new branch and checks it out
+func (g *GitVCSProvider) CreateAndCheckoutBranch(repoPath, branchName string) error {
+	cmd := exec.Command("git", "checkout", "-b", branchName)
+	cmd.Dir = repoPath
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create and checkout branch %s: %w - %s", branchName, err, stderr.String())
+	}
+
+	return nil
+}

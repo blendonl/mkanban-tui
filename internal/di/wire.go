@@ -45,10 +45,11 @@ type Container struct {
 	CreateColumnUseCase *column.CreateColumnUseCase
 
 	// Use Cases - Task
-	CreateTaskUseCase *task.CreateTaskUseCase
-	MoveTaskUseCase   *task.MoveTaskUseCase
-	UpdateTaskUseCase *task.UpdateTaskUseCase
-	ListTasksUseCase  *task.ListTasksUseCase
+	CreateTaskUseCase   *task.CreateTaskUseCase
+	MoveTaskUseCase     *task.MoveTaskUseCase
+	UpdateTaskUseCase   *task.UpdateTaskUseCase
+	ListTasksUseCase    *task.ListTasksUseCase
+	CheckoutTaskUseCase *task.CheckoutTaskUseCase
 
 	// Use Cases - Session
 	TrackSessionsUseCase        *session.TrackSessionsUseCase
@@ -88,6 +89,7 @@ func InitializeContainer() (*Container, error) {
 		task.NewMoveTaskUseCase,
 		task.NewUpdateTaskUseCase,
 		task.NewListTasksUseCase,
+		task.NewCheckoutTaskUseCase,
 
 		// Use Cases - Session
 		session.NewTrackSessionsUseCase,

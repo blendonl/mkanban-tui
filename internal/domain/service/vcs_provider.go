@@ -19,4 +19,13 @@ type VCSProvider interface {
 	// GetRefsPath returns the path to the refs directory for watching
 	// (e.g., .git/refs/heads/ for git)
 	GetRefsPath(repoPath string) string
+
+	// BranchExists checks if a branch with the given name exists
+	BranchExists(repoPath, branchName string) (bool, error)
+
+	// CheckoutBranch checks out an existing branch
+	CheckoutBranch(repoPath, branchName string) error
+
+	// CreateAndCheckoutBranch creates a new branch and checks it out
+	CreateAndCheckoutBranch(repoPath, branchName string) error
 }
