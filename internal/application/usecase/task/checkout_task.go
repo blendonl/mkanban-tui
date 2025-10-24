@@ -14,18 +14,21 @@ import (
 
 // CheckoutTaskUseCase handles checking out a task (moves to In Progress and checks out git branch)
 type CheckoutTaskUseCase struct {
-	boardRepo   repository.BoardRepository
-	vcsProvider service.VCSProvider
+	boardRepo        repository.BoardRepository
+	vcsProvider      service.VCSProvider
+	repoPathResolver service.RepoPathResolver
 }
 
 // NewCheckoutTaskUseCase creates a new CheckoutTaskUseCase
 func NewCheckoutTaskUseCase(
 	boardRepo repository.BoardRepository,
 	vcsProvider service.VCSProvider,
+	repoPathResolver service.RepoPathResolver,
 ) *CheckoutTaskUseCase {
 	return &CheckoutTaskUseCase{
-		boardRepo:   boardRepo,
-		vcsProvider: vcsProvider,
+		boardRepo:        boardRepo,
+		vcsProvider:      vcsProvider,
+		repoPathResolver: repoPathResolver,
 	}
 }
 
@@ -48,16 +51,10 @@ func (uc *CheckoutTaskUseCase) Execute(
 		return fmt.Errorf("failed to find task: %w", err)
 	}
 
-	// Check if we're in a git repository
-	workingDir := "."
-	if !uc.vcsProvider.IsRepository(workingDir) {
-		return fmt.Errorf("not in a git repository")
-	}
-
-	// Get repository root
-	repoRoot, err := uc.vcsProvider.GetRepositoryRoot(workingDir)
+	// Get repository root from active tmux session
+	repoRoot, err := uc.repoPathResolver.GetRepoPathForBoard(board)
 	if err != nil {
-		return fmt.Errorf("failed to get repository root: %w", err)
+		return fmt.Errorf("failed to get repository path: %w (ensure tmux session is active)", err)
 	}
 
 	// Determine branch name
@@ -71,7 +68,6 @@ func (uc *CheckoutTaskUseCase) Execute(
 
 		// Set metadata for future reference
 		task.SetMetadata("git_branch", branchName)
-		task.SetMetadata("repo_path", repoRoot)
 	}
 
 	// Check if branch exists

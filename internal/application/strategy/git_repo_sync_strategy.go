@@ -274,7 +274,6 @@ func (s *GitRepoSyncStrategy) createBranchTask(
 	// Set metadata
 	task.SetMetadata("git_branch", branchName)
 	task.SetMetadata("is_current_branch", fmt.Sprintf("%t", isCurrent))
-	task.SetMetadata("repo_path", repoRoot)
 
 	// Add task to column
 	if err := column.AddTask(task); err != nil {
@@ -294,7 +293,6 @@ func (s *GitRepoSyncStrategy) updateBranchTask(
 ) error {
 	// Update metadata
 	task.SetMetadata("is_current_branch", fmt.Sprintf("%t", isCurrent))
-	task.SetMetadata("repo_path", repoRoot)
 
 	// Determine target column
 	targetColumnName := "To Do"

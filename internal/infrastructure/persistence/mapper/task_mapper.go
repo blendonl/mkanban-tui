@@ -12,7 +12,6 @@ import (
 type GitMetadata struct {
 	Branch          string `yaml:"branch,omitempty"`
 	IsCurrentBranch string `yaml:"is_current_branch,omitempty"`
-	RepoPath        string `yaml:"repo_path,omitempty"`
 }
 
 // TaskStorage represents task storage format
@@ -51,13 +50,11 @@ func TaskToStorage(task *entity.Task) (*TaskStorage, []byte, error) {
 	// Extract git metadata if present
 	gitBranch, hasGitBranch := task.GetMetadata("git_branch")
 	isCurrentBranch, hasIsCurrentBranch := task.GetMetadata("is_current_branch")
-	repoPath, hasRepoPath := task.GetMetadata("repo_path")
 
-	if hasGitBranch || hasIsCurrentBranch || hasRepoPath {
+	if hasGitBranch || hasIsCurrentBranch {
 		storage.Git = &GitMetadata{
 			Branch:          gitBranch,
 			IsCurrentBranch: isCurrentBranch,
-			RepoPath:        repoPath,
 		}
 	}
 
@@ -138,9 +135,6 @@ func TaskFromStorage(metadata *TaskStorage, markdownContent []byte, taskID *valu
 		}
 		if metadata.Git.IsCurrentBranch != "" {
 			task.SetMetadata("is_current_branch", metadata.Git.IsCurrentBranch)
-		}
-		if metadata.Git.RepoPath != "" {
-			task.SetMetadata("repo_path", metadata.Git.RepoPath)
 		}
 	}
 

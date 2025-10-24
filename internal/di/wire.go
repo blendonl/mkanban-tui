@@ -16,6 +16,7 @@ import (
 	"mkanban/internal/infrastructure/config"
 	"mkanban/internal/infrastructure/external"
 	"mkanban/internal/infrastructure/persistence/filesystem"
+	infraService "mkanban/internal/infrastructure/service"
 )
 
 // Container holds all application dependencies
@@ -32,6 +33,7 @@ type Container struct {
 	SessionTracker    service.SessionTracker
 	VCSProvider       service.VCSProvider
 	ChangeWatcher     service.ChangeWatcher
+	RepoPathResolver  service.RepoPathResolver
 
 	// Strategies
 	BoardSyncStrategies []strategy.BoardSyncStrategy
@@ -72,6 +74,7 @@ func InitializeContainer() (*Container, error) {
 		ProvideSessionTracker,
 		ProvideVCSProvider,
 		ProvideChangeWatcher,
+		ProvideRepoPathResolver,
 
 		// Strategies
 		ProvideBoardSyncStrategies,
@@ -138,6 +141,13 @@ func ProvideVCSProvider() service.VCSProvider {
 
 func ProvideChangeWatcher() (service.ChangeWatcher, error) {
 	return external.NewFSNotifyWatcher()
+}
+
+func ProvideRepoPathResolver(
+	sessionTracker service.SessionTracker,
+	vcsProvider service.VCSProvider,
+) service.RepoPathResolver {
+	return infraService.NewTmuxRepoPathResolver(sessionTracker, vcsProvider)
 }
 
 func ProvideBoardSyncStrategies(

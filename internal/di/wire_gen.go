@@ -17,6 +17,7 @@ import (
 	"mkanban/internal/infrastructure/config"
 	"mkanban/internal/infrastructure/external"
 	"mkanban/internal/infrastructure/persistence/filesystem"
+	service2 "mkanban/internal/infrastructure/service"
 )
 
 // Injectors from wire.go:
@@ -36,6 +37,7 @@ func InitializeContainer() (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
+	repoPathResolver := ProvideRepoPathResolver(sessionTracker, vcsProvider)
 	v := ProvideBoardSyncStrategies(vcsProvider, config)
 	createBoardUseCase := board.NewCreateBoardUseCase(boardService)
 	getBoardUseCase := board.NewGetBoardUseCase(boardRepository)
@@ -45,7 +47,7 @@ func InitializeContainer() (*Container, error) {
 	moveTaskUseCase := task.NewMoveTaskUseCase(boardService)
 	updateTaskUseCase := task.NewUpdateTaskUseCase(boardService)
 	listTasksUseCase := task.NewListTasksUseCase(boardRepository, config)
-	checkoutTaskUseCase := task.NewCheckoutTaskUseCase(boardRepository, vcsProvider)
+	checkoutTaskUseCase := task.NewCheckoutTaskUseCase(boardRepository, vcsProvider, repoPathResolver)
 	syncSessionBoardUseCase := session.NewSyncSessionBoardUseCase(boardRepository, boardService, validationService, v)
 	trackSessionsUseCase := session.NewTrackSessionsUseCase(sessionTracker, syncSessionBoardUseCase)
 	getActiveSessionBoardUseCase := session.NewGetActiveSessionBoardUseCase(sessionTracker, boardRepository, v)
@@ -57,6 +59,7 @@ func InitializeContainer() (*Container, error) {
 		SessionTracker:               sessionTracker,
 		VCSProvider:                  vcsProvider,
 		ChangeWatcher:                changeWatcher,
+		RepoPathResolver:             repoPathResolver,
 		BoardSyncStrategies:          v,
 		CreateBoardUseCase:           createBoardUseCase,
 		GetBoardUseCase:              getBoardUseCase,
@@ -90,6 +93,7 @@ type Container struct {
 	SessionTracker    service.SessionTracker
 	VCSProvider       service.VCSProvider
 	ChangeWatcher     service.ChangeWatcher
+	RepoPathResolver  service.RepoPathResolver
 
 	// Strategies
 	BoardSyncStrategies []strategy.BoardSyncStrategy
@@ -149,6 +153,13 @@ func ProvideVCSProvider() service.VCSProvider {
 
 func ProvideChangeWatcher() (service.ChangeWatcher, error) {
 	return external.NewFSNotifyWatcher()
+}
+
+func ProvideRepoPathResolver(
+	sessionTracker service.SessionTracker,
+	vcsProvider service.VCSProvider,
+) service.RepoPathResolver {
+	return service2.NewTmuxRepoPathResolver(sessionTracker, vcsProvider)
 }
 
 func ProvideBoardSyncStrategies(
