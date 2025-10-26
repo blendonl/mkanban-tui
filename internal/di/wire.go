@@ -7,10 +7,12 @@ import (
 	"github.com/google/wire"
 
 	"mkanban/internal/application/strategy"
+	"mkanban/internal/application/usecase/action"
 	"mkanban/internal/application/usecase/board"
 	"mkanban/internal/application/usecase/column"
 	"mkanban/internal/application/usecase/session"
 	"mkanban/internal/application/usecase/task"
+	"mkanban/internal/domain/entity"
 	"mkanban/internal/domain/repository"
 	"mkanban/internal/domain/service"
 	"mkanban/internal/infrastructure/config"
@@ -25,7 +27,8 @@ type Container struct {
 	Config *config.Config
 
 	// Repositories
-	BoardRepo repository.BoardRepository
+	BoardRepo  repository.BoardRepository
+	ActionRepo repository.ActionRepository
 
 	// Domain Services
 	ValidationService *service.ValidationService
@@ -57,6 +60,24 @@ type Container struct {
 	TrackSessionsUseCase        *session.TrackSessionsUseCase
 	GetActiveSessionBoardUseCase *session.GetActiveSessionBoardUseCase
 	SyncSessionBoardUseCase     *session.SyncSessionBoardUseCase
+
+	// Use Cases - Action
+	CreateActionUseCase   *action.CreateActionUseCase
+	UpdateActionUseCase   *action.UpdateActionUseCase
+	DeleteActionUseCase   *action.DeleteActionUseCase
+	GetActionUseCase      *action.GetActionUseCase
+	ListActionsUseCase    *action.ListActionsUseCase
+	EnableActionUseCase   *action.EnableActionUseCase
+	DisableActionUseCase  *action.DisableActionUseCase
+	EvaluateActionsUseCase *action.EvaluateActionsUseCase
+	ExecuteActionUseCase  *action.ExecuteActionUseCase
+	ProcessEventUseCase   *action.ProcessEventUseCase
+
+	// Infrastructure Services
+	EventBus      entity.EventBus
+	Notifier      entity.Notifier
+	ScriptRunner  entity.ScriptRunner
+	TaskMutator   entity.TaskMutator
 }
 
 // InitializeContainer sets up all dependencies
@@ -67,6 +88,7 @@ func InitializeContainer() (*Container, error) {
 
 		// Repositories
 		ProvideBoardRepository,
+		ProvideActionRepository,
 
 		// Domain Services
 		ProvideValidationService,
@@ -98,6 +120,24 @@ func InitializeContainer() (*Container, error) {
 		session.NewTrackSessionsUseCase,
 		session.NewGetActiveSessionBoardUseCase,
 		session.NewSyncSessionBoardUseCase,
+
+		// Infrastructure Services
+		ProvideEventBus,
+		ProvideNotifier,
+		ProvideScriptRunner,
+		ProvideTaskMutator,
+
+		// Use Cases - Action
+		action.NewCreateActionUseCase,
+		action.NewUpdateActionUseCase,
+		action.NewDeleteActionUseCase,
+		action.NewGetActionUseCase,
+		action.NewListActionsUseCase,
+		action.NewEnableActionUseCase,
+		action.NewDisableActionUseCase,
+		action.NewEvaluateActionsUseCase,
+		action.NewExecuteActionUseCase,
+		action.NewProcessEventUseCase,
 
 		// Wire the container
 		wire.Struct(new(Container), "*"),
@@ -165,4 +205,28 @@ func ProvideBoardSyncStrategies(
 	strategies = append(strategies, generalStrategy)
 
 	return strategies
+}
+
+func ProvideActionRepository(cfg *config.Config) repository.ActionRepository {
+	return filesystem.NewActionRepository(cfg)
+}
+
+func ProvideEventBus() entity.EventBus {
+	return infraService.NewEventBus()
+}
+
+func ProvideNotifier(cfg *config.Config) entity.Notifier {
+	return external.NewDesktopNotifier(cfg.Actions.NotificationsEnabled)
+}
+
+func ProvideScriptRunner(cfg *config.Config) entity.ScriptRunner {
+	return external.NewScriptExecutor(cfg.Actions.ScriptsEnabled, cfg.Actions.ScriptsDir)
+}
+
+func ProvideTaskMutator(
+	createTaskUseCase *task.CreateTaskUseCase,
+	updateTaskUseCase *task.UpdateTaskUseCase,
+	moveTaskUseCase *task.MoveTaskUseCase,
+) entity.TaskMutator {
+	return infraService.NewTaskMutatorService(createTaskUseCase, updateTaskUseCase, moveTaskUseCase)
 }

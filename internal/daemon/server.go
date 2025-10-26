@@ -20,6 +20,7 @@ type Server struct {
 	config         *config.Config
 	listener       net.Listener
 	sessionManager *SessionManager
+	actionManager  *ActionManager
 	mu             sync.RWMutex
 }
 
@@ -59,6 +60,28 @@ func (s *Server) Start() error {
 			return fmt.Errorf("failed to start session manager: %w", err)
 		}
 		fmt.Println("Session tracking started")
+	}
+
+	// Initialize action manager if action use cases are available
+	if s.container.EvaluateActionsUseCase != nil &&
+		s.container.ExecuteActionUseCase != nil &&
+		s.container.ProcessEventUseCase != nil &&
+		s.container.ActionRepo != nil &&
+		s.container.EventBus != nil {
+
+		s.actionManager = NewActionManager(
+			s.container.Config,
+			s.container.EvaluateActionsUseCase,
+			s.container.ExecuteActionUseCase,
+			s.container.ProcessEventUseCase,
+			s.container.ActionRepo,
+			s.container.EventBus,
+		)
+
+		if err := s.actionManager.Start(); err != nil {
+			return fmt.Errorf("failed to start action manager: %w", err)
+		}
+		fmt.Println("Action manager started")
 	}
 
 	socketDir := s.config.Daemon.SocketDir
@@ -353,6 +376,13 @@ func (s *Server) sendError(encoder *json.Encoder, message string) {
 
 // Stop stops the daemon server
 func (s *Server) Stop() error {
+	// Stop action manager if it exists
+	if s.actionManager != nil {
+		if err := s.actionManager.Stop(); err != nil {
+			fmt.Printf("Error stopping action manager: %v\n", err)
+		}
+	}
+
 	// Stop session manager if it exists
 	if s.sessionManager != nil {
 		if err := s.sessionManager.Stop(); err != nil {

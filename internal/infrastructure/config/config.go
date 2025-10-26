@@ -22,6 +22,7 @@ type Config struct {
 	TUI            TUIConfig            `yaml:"tui"`
 	Keybindings    KeybindingsConfig    `yaml:"keybindings"`
 	SessionTracking SessionTrackingConfig `yaml:"session_tracking"`
+	Actions        ActionsConfig        `yaml:"actions"`
 }
 
 // StorageConfig holds storage-related configuration
@@ -127,6 +128,75 @@ type GitSyncConfig struct {
 	AutoSyncBranches   bool `yaml:"auto_sync_branches"`
 	WatchForChanges    bool `yaml:"watch_for_changes"`
 	CreateTasksForRemotes bool `yaml:"create_tasks_for_remotes"`
+}
+
+// ActionsConfig holds actions/reminders configuration
+type ActionsConfig struct {
+	Enabled          bool                 `yaml:"enabled"`
+	CheckInterval    int                  `yaml:"check_interval"` // in seconds, for time-based actions
+	NotificationsEnabled bool             `yaml:"notifications_enabled"`
+	ScriptsEnabled   bool                 `yaml:"scripts_enabled"`
+	ScriptsDir       string               `yaml:"scripts_dir"`
+	Templates        []ActionTemplate     `yaml:"templates"`
+}
+
+// ActionTemplate represents a reusable action template
+type ActionTemplate struct {
+	ID          string                 `yaml:"id"`
+	Name        string                 `yaml:"name"`
+	Description string                 `yaml:"description"`
+	Trigger     TriggerConfig          `yaml:"trigger"`
+	ActionType  ActionTypeConfig       `yaml:"action_type"`
+	Conditions  []ConditionConfig      `yaml:"conditions,omitempty"`
+}
+
+// TriggerConfig represents trigger configuration
+type TriggerConfig struct {
+	Type     string            `yaml:"type"` // "time" or "event"
+	Schedule *ScheduleConfig   `yaml:"schedule,omitempty"`
+	Event    string            `yaml:"event,omitempty"` // event type for event triggers
+}
+
+// ScheduleConfig represents schedule configuration
+type ScheduleConfig struct {
+	Type     string `yaml:"type"` // "absolute", "relative_due_date", "relative_creation", "recurring"
+	Time     string `yaml:"time,omitempty"` // ISO 8601 format for absolute
+	Offset   string `yaml:"offset,omitempty"` // duration string like "1h", "30m", "2d"
+	CronExpr string `yaml:"cron,omitempty"` // cron expression for recurring
+}
+
+// ActionTypeConfig represents action type configuration
+type ActionTypeConfig struct {
+	Type           string            `yaml:"type"` // "notification", "script", "task_mutation", "task_movement", "task_creation"
+	// For notifications
+	Title          string            `yaml:"title,omitempty"`
+	Message        string            `yaml:"message,omitempty"`
+	// For scripts
+	ScriptPath     string            `yaml:"script_path,omitempty"`
+	ScriptEnv      map[string]string `yaml:"script_env,omitempty"`
+	// For task mutations
+	UpdatePriority string            `yaml:"update_priority,omitempty"`
+	UpdateStatus   string            `yaml:"update_status,omitempty"`
+	AddTags        []string          `yaml:"add_tags,omitempty"`
+	RemoveTags     []string          `yaml:"remove_tags,omitempty"`
+	SetMetadata    map[string]string `yaml:"set_metadata,omitempty"`
+	// For task movement
+	TargetColumn   string            `yaml:"target_column,omitempty"`
+	// For task creation
+	TaskTitle      string            `yaml:"task_title,omitempty"`
+	TaskDescription string           `yaml:"task_description,omitempty"`
+	TaskPriority   string            `yaml:"task_priority,omitempty"`
+	TaskStatus     string            `yaml:"task_status,omitempty"`
+	TaskColumn     string            `yaml:"task_column,omitempty"`
+	TaskTags       []string          `yaml:"task_tags,omitempty"`
+	TaskMetadata   map[string]string `yaml:"task_metadata,omitempty"`
+}
+
+// ConditionConfig represents condition configuration
+type ConditionConfig struct {
+	Field    string      `yaml:"field"`
+	Operator string      `yaml:"operator"`
+	Value    interface{} `yaml:"value"`
 }
 
 // Loader handles loading and saving configuration
@@ -311,6 +381,32 @@ func (l *Loader) createDefaultConfig() (*Config, error) {
 				AutoSyncBranches:      true,
 				WatchForChanges:       true,
 				CreateTasksForRemotes: false,
+			},
+		},
+		Actions: ActionsConfig{
+			Enabled:              true,
+			CheckInterval:        60, // Check every minute
+			NotificationsEnabled: true,
+			ScriptsEnabled:       true,
+			ScriptsDir:           filepath.Join(homeDir, ".config", "mkanban", "scripts"),
+			Templates: []ActionTemplate{
+				{
+					ID:          "due-tomorrow-reminder",
+					Name:        "Due Tomorrow Reminder",
+					Description: "Notify when a task is due tomorrow",
+					Trigger: TriggerConfig{
+						Type: "time",
+						Schedule: &ScheduleConfig{
+							Type:   "relative_due_date",
+							Offset: "1d",
+						},
+					},
+					ActionType: ActionTypeConfig{
+						Type:    "notification",
+						Title:   "Task Due Tomorrow",
+						Message: "A task is due tomorrow!",
+					},
+				},
 			},
 		},
 	}
