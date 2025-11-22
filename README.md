@@ -20,14 +20,37 @@ The TUI client automatically starts the daemon if it's not already running and s
 
 ## Building
 
-Build both binaries:
+### Prerequisites
+- Go 1.24 or later
+- Git (for git workflow features)
+- Make (optional, for using Makefile)
 
+### Quick Build
 ```bash
-# Build TUI client
-go build -o mkanban ./cmd/mkanban
+# Build both binaries
+make build
 
-# Build daemon
+# Or manually:
+go build -o mkanban ./cmd/mkanban
 go build -o mkanbad ./cmd/mkanbad
+```
+
+### Development
+```bash
+# Run tests
+make test
+
+# Format code
+make fmt
+
+# Run linters
+make lint
+
+# Generate wire DI
+make wire
+
+# Generate coverage report
+make coverage
 ```
 
 ## Features
@@ -81,15 +104,94 @@ mkanban task --help
 
 ## Installation
 
-### From Source
+### Arch Linux
 
+#### From AUR (when published)
 ```bash
+# Using yay
+yay -S mkanban-tui
+
+# Using paru
+paru -S mkanban-tui
+```
+
+#### Build from source (Arch Linux)
+```bash
+# Clone the repository
+git clone https://github.com/blendonl/mkanban-tui.git
+cd mkanban-tui
+
+# Build and install package
+makepkg -sfi
+
+# Or use the Makefile
+make arch-install
+```
+
+### From Source (Other Linux Distributions)
+
+#### Automated Installation
+```bash
+# Clone the repository
+git clone https://github.com/blendonl/mkanban-tui.git
+cd mkanban-tui
+
+# Install system-wide (requires sudo)
+sudo ./install.sh
+
+# Or install to user directory
+PREFIX=$HOME/.local ./install.sh
+```
+
+#### Using Make
+```bash
+# Build binaries
+make build
+
+# Install system-wide (requires sudo)
+sudo make install
+
+# Or install to custom prefix
+PREFIX=$HOME/.local make install
+```
+
+#### Manual Build
+```bash
+# Build TUI client
 go build -o mkanban ./cmd/mkanban
+
+# Build daemon
 go build -o mkanbad ./cmd/mkanbad
 
 # Install to PATH
 sudo mv mkanban /usr/local/bin/
 sudo mv mkanbad /usr/local/bin/
+```
+
+### Enable Systemd Service (Optional but Recommended)
+
+The daemon can be automatically started on login:
+
+```bash
+# Install systemd user service (if not already installed)
+mkdir -p ~/.config/systemd/user
+cp systemd/mkanbad.service ~/.config/systemd/user/
+
+# Enable and start the service
+systemctl --user daemon-reload
+systemctl --user enable --now mkanbad.service
+
+# Check status
+systemctl --user status mkanbad.service
+```
+
+For system-wide daemon (multiple users):
+```bash
+# Install system service
+sudo cp systemd/mkanbad@.service /usr/lib/systemd/system/
+
+# Enable for specific user
+sudo systemctl enable --now mkanbad@username.service
 ```
 
 ### Shell Completion
@@ -395,8 +497,25 @@ The daemon uses Unix sockets with JSON-based request/response protocol:
 
 - [x] Integrate TUI client with daemon
 - [x] Implement real-time updates when daemon notifies changes
+- [x] Add systemd service file for daemon auto-start
 - [ ] Add task editing dialog in TUI
 - [ ] Add column management in TUI
-- [ ] Add systemd service file for daemon auto-start
+- [ ] Publish to AUR (Arch User Repository)
 - [ ] Add configuration UI for daemon settings
 - [ ] Add support for multiple simultaneous TUI instances
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Development Setup
+
+1. Clone the repository
+2. Install Go 1.24 or later
+3. Run `make deps` to download dependencies
+4. Run `make build` to build binaries
+5. Run `make test` to run tests
+
+### Project Structure
+
+See the [Architecture](#architecture) section for an overview of the codebase structure.

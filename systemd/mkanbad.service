@@ -1,0 +1,32 @@
+[Unit]
+Description=mkanban daemon - Kanban board management daemon
+Documentation=https://github.com/blendonl/mkanban-tui
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/mkanbad
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.config/mkanban %h/.local/share/mkanban
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# Resource limits
+LimitNOFILE=4096
+TasksMax=256
+
+[Install]
+WantedBy=default.target
