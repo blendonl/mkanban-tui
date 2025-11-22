@@ -9,6 +9,7 @@ import (
 	"mkanban/internal/application/usecase/action"
 	"mkanban/internal/domain/entity"
 	"mkanban/internal/domain/repository"
+	"mkanban/internal/domain/valueobject"
 	"mkanban/internal/infrastructure/config"
 )
 
@@ -167,8 +168,11 @@ func (m *ActionManager) subscribeToEvents() {
 	}
 
 	// Subscribe to all event types that we care about
-	eventTypes := []entity.EventType{
-		entity.TriggerTypeEvent,
+	eventTypes := []valueobject.EventType{
+		valueobject.EventTaskCreated,
+		valueobject.EventTaskUpdated,
+		valueobject.EventTaskDeleted,
+		valueobject.EventTaskMoved,
 	}
 
 	for _, eventType := range eventTypes {

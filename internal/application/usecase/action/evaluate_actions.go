@@ -56,7 +56,7 @@ func (uc *EvaluateActionsUseCase) Execute(ctx context.Context, evalCtx Evaluatio
 	var task *entity.Task
 
 	if evalCtx.BoardID != "" {
-		board, err = uc.boardRepo.GetByID(ctx, evalCtx.BoardID)
+		board, err = uc.boardRepo.FindByID(ctx, evalCtx.BoardID)
 		if err != nil {
 			// Continue without board context
 			board = nil
