@@ -107,7 +107,7 @@ Examples:
 		filteredTasks := make([]dto.TaskDTO, 0)
 		for _, task := range tasks {
 			// Column filter
-			if column != "" && task.Column != column {
+			if column != "" && task.ColumnName != column {
 				continue
 			}
 
@@ -182,7 +182,7 @@ Examples:
 			// Group by column
 			columns := make(map[string][]dto.TaskDTO)
 			for _, task := range filteredTasks {
-				columns[task.Column] = append(columns[task.Column], task)
+				columns[task.ColumnName] = append(columns[task.ColumnName], task)
 			}
 
 			// Print tasks grouped by column
@@ -306,7 +306,7 @@ Examples:
 			fmt.Println()
 			printer.Println("ID:          %s", foundTask.ShortID)
 			printer.Println("Full ID:     %s", foundTask.ID)
-			printer.Println("Column:      %s", foundTask.Column)
+			printer.Println("Column:      %s", foundTask.ColumnName)
 			printer.Println("Priority:    %s", foundTask.Priority)
 			printer.Println("Status:      %s", foundTask.Status)
 			if len(foundTask.Tags) > 0 {
@@ -440,10 +440,12 @@ Examples:
 			Description: description,
 			ColumnName:  column,
 			Priority:    priority,
-			Status:      status,
 			Tags:        tags,
 			// DueDate:     dueDate, // TODO: Add when DTO supports it
 		})
+
+		// Note: Status parameter ignored as CreateTaskRequest doesn't support it
+		_ = status
 		if err != nil {
 			return fmt.Errorf("failed to create task: %w", err)
 		}
@@ -583,7 +585,12 @@ Examples:
 		}
 
 		// Execute move task use case
-		err = container.MoveTaskUseCase.Execute(ctx, boardID, taskID, targetColumn)
+		moveReq := dto.MoveTaskRequest{
+			TaskID:           taskID,
+			TargetColumnName: targetColumn,
+		}
+
+		_, err = container.MoveTaskUseCase.Execute(ctx, boardID, moveReq)
 		if err != nil {
 			return fmt.Errorf("failed to move task: %w", err)
 		}
@@ -654,7 +661,12 @@ Examples:
 		}
 
 		// Move task
-		err = container.MoveTaskUseCase.Execute(ctx, boardID, taskID, nextColumn)
+		moveReq := dto.MoveTaskRequest{
+			TaskID:           taskID,
+			TargetColumnName: nextColumn,
+		}
+
+		_, err = container.MoveTaskUseCase.Execute(ctx, boardID, moveReq)
 		if err != nil {
 			return fmt.Errorf("failed to move task: %w", err)
 		}
@@ -723,7 +735,12 @@ Examples:
 		}
 
 		// Move task
-		err = container.MoveTaskUseCase.Execute(ctx, boardID, taskID, prevColumn)
+		moveReq := dto.MoveTaskRequest{
+			TaskID:           taskID,
+			TargetColumnName: prevColumn,
+		}
+
+		_, err = container.MoveTaskUseCase.Execute(ctx, boardID, moveReq)
 		if err != nil {
 			return fmt.Errorf("failed to move task: %w", err)
 		}

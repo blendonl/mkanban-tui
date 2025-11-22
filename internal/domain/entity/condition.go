@@ -1,7 +1,6 @@
 package entity
 
 import (
-	"mkanban/internal/domain/valueobject"
 	"strings"
 )
 

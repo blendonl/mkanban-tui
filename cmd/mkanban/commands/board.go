@@ -82,11 +82,6 @@ Examples:
 			rows := make([][]string, 0, len(boards))
 
 			for _, board := range boards {
-				taskCount := 0
-				for _, col := range board.Columns {
-					taskCount += len(col.Tasks)
-				}
-
 				desc := board.Description
 				if len(desc) > 50 {
 					desc = desc[:47] + "..."
@@ -96,8 +91,8 @@ Examples:
 					board.ID,
 					board.Name,
 					desc,
-					fmt.Sprintf("%d", len(board.Columns)),
-					fmt.Sprintf("%d", taskCount),
+					fmt.Sprintf("%d", board.ColumnCount),
+					fmt.Sprintf("%d", board.TaskCount),
 				})
 			}
 

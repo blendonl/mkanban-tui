@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"mkanban/internal/application/dto"
 )
 
 // columnCmd represents the column command
@@ -130,13 +131,7 @@ Examples:
 		}
 
 		// Find the column
-		var foundColumn *struct {
-			Name        string
-			Description string
-			Order       int
-			WIPLimit    int
-			Tasks       []interface{}
-		}
+		var foundColumn *dto.ColumnDTO
 
 		for i, col := range board.Columns {
 			if col.Name == columnName {
@@ -342,10 +337,7 @@ Examples:
 		}
 
 		// Find the column
-		var foundColumn *struct {
-			Name  string
-			Tasks []interface{}
-		}
+		var foundColumn *dto.ColumnDTO
 
 		for i, col := range board.Columns {
 			if col.Name == columnName {

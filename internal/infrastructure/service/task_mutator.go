@@ -34,11 +34,16 @@ func (s *TaskMutatorService) UpdateTask(boardID string, taskEntity *entity.Task)
 	ctx := context.Background()
 
 	// Convert entity to update request
+	title := taskEntity.Title()
+	description := taskEntity.Description()
+	priority := taskEntity.Priority().String()
+	status := taskEntity.Status().String()
+
 	updateReq := dto.UpdateTaskRequest{
-		Title:       taskEntity.Title(),
-		Description: taskEntity.Description(),
-		Priority:    taskEntity.Priority().String(),
-		Status:      taskEntity.Status().String(),
+		Title:       &title,
+		Description: &description,
+		Priority:    &priority,
+		Status:      &status,
 		Tags:        taskEntity.Tags(),
 	}
 
@@ -67,7 +72,6 @@ func (s *TaskMutatorService) CreateTask(boardID string, columnName string, taskE
 		Title:       taskEntity.Title(),
 		Description: taskEntity.Description(),
 		Priority:    taskEntity.Priority().String(),
-		Status:      taskEntity.Status().String(),
 		ColumnName:  columnName,
 		Tags:        taskEntity.Tags(),
 	}
