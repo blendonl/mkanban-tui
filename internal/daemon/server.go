@@ -22,6 +22,8 @@ type Server struct {
 	sessionManager *SessionManager
 	actionManager  *ActionManager
 	mu             sync.RWMutex
+	subscribers    map[string]map[net.Conn]chan *Notification // boardID -> conn -> channel
+	subMu          sync.RWMutex
 }
 
 // NewServer creates a new daemon server
@@ -33,8 +35,9 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	}
 
 	return &Server{
-		container: container,
-		config:    cfg,
+		container:   container,
+		config:      cfg,
+		subscribers: make(map[string]map[net.Conn]chan *Notification),
 	}, nil
 }
 
@@ -121,20 +124,40 @@ func (s *Server) acceptConnections() error {
 
 // handleConnection handles a single client connection
 func (s *Server) handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		s.cleanupSubscriber(conn)
+		conn.Close()
+	}()
 
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
 
-	var req Request
-	if err := decoder.Decode(&req); err != nil {
-		s.sendError(encoder, fmt.Sprintf("failed to decode request: %v", err))
-		return
-	}
+	// Handle requests in a loop for persistent connections
+	for {
+		var req Request
+		if err := decoder.Decode(&req); err != nil {
+			// Connection closed or error
+			return
+		}
 
-	resp := s.handleRequest(&req)
-	if err := encoder.Encode(resp); err != nil {
-		fmt.Printf("Failed to encode response: %v\n", err)
+		// Handle subscribe request specially - it keeps the connection open
+		if req.Type == RequestSubscribe {
+			s.handleSubscribe(conn, encoder, &req)
+			return // Connection will be kept open for notifications
+		}
+
+		// Handle regular request-response
+		resp := s.handleRequest(&req)
+		if err := encoder.Encode(resp); err != nil {
+			fmt.Printf("Failed to encode response: %v\n", err)
+			return
+		}
+
+		// For regular requests, close after response
+		// (except for subscribe which is handled above)
+		if req.Type != RequestUnsubscribe && req.Type != RequestPing {
+			return
+		}
 	}
 }
 
@@ -163,6 +186,8 @@ func (s *Server) handleRequest(req *Request) *Response {
 		return s.handleDeleteColumn(ctx, req)
 	case RequestGetActiveBoard:
 		return s.handleGetActiveBoard(ctx)
+	case RequestPing:
+		return &Response{Success: true, Data: "pong"}
 	default:
 		return &Response{
 			Success: false,
@@ -240,6 +265,13 @@ func (s *Server) handleAddTask(ctx context.Context, req *Request) *Response {
 		return &Response{Success: false, Error: err.Error()}
 	}
 
+	// Notify subscribers
+	s.notifySubscribers(payload.BoardID, &Notification{
+		Type:    NotificationTaskCreated,
+		BoardID: payload.BoardID,
+		Data:    taskDTO,
+	})
+
 	return &Response{Success: true, Data: taskDTO}
 }
 
@@ -263,6 +295,13 @@ func (s *Server) handleMoveTask(ctx context.Context, req *Request) *Response {
 		return &Response{Success: false, Error: err.Error()}
 	}
 
+	// Notify subscribers
+	s.notifySubscribers(payload.BoardID, &Notification{
+		Type:    NotificationTaskMoved,
+		BoardID: payload.BoardID,
+		Data:    boardDTO,
+	})
+
 	return &Response{Success: true, Data: boardDTO}
 }
 
@@ -280,6 +319,13 @@ func (s *Server) handleUpdateTask(ctx context.Context, req *Request) *Response {
 	if err != nil {
 		return &Response{Success: false, Error: err.Error()}
 	}
+
+	// Notify subscribers
+	s.notifySubscribers(payload.BoardID, &Notification{
+		Type:    NotificationTaskUpdated,
+		BoardID: payload.BoardID,
+		Data:    taskDTO,
+	})
 
 	return &Response{Success: true, Data: taskDTO}
 }
@@ -400,4 +446,80 @@ func (s *Server) Stop() error {
 // GetSocketPath returns the socket path from config
 func GetSocketPath(cfg *config.Config) string {
 	return filepath.Join(cfg.Daemon.SocketDir, cfg.Daemon.SocketName)
+}
+
+// handleSubscribe handles a subscription request
+func (s *Server) handleSubscribe(conn net.Conn, encoder *json.Encoder, req *Request) {
+	var payload SubscribePayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		s.sendError(encoder, err.Error())
+		return
+	}
+
+	// Create notification channel for this connection
+	notifChan := make(chan *Notification, 10)
+
+	// Register subscriber
+	s.subMu.Lock()
+	if _, exists := s.subscribers[payload.BoardID]; !exists {
+		s.subscribers[payload.BoardID] = make(map[net.Conn]chan *Notification)
+	}
+	s.subscribers[payload.BoardID][conn] = notifChan
+	s.subMu.Unlock()
+
+	// Send success response
+	resp := &Response{Success: true, Data: "subscribed"}
+	if err := encoder.Encode(resp); err != nil {
+		s.cleanupSubscriber(conn)
+		return
+	}
+
+	// Start sending notifications
+	for notification := range notifChan {
+		if err := encoder.Encode(notification); err != nil {
+			// Connection error, cleanup and exit
+			s.cleanupSubscriber(conn)
+			return
+		}
+	}
+}
+
+// notifySubscribers sends a notification to all subscribers of a board
+func (s *Server) notifySubscribers(boardID string, notification *Notification) {
+	s.subMu.RLock()
+	defer s.subMu.RUnlock()
+
+	subscribers, exists := s.subscribers[boardID]
+	if !exists {
+		return
+	}
+
+	// Send notification to all subscribers
+	for _, ch := range subscribers {
+		select {
+		case ch <- notification:
+			// Notification sent
+		default:
+			// Channel full, skip this subscriber
+		}
+	}
+}
+
+// cleanupSubscriber removes a connection from all subscriptions
+func (s *Server) cleanupSubscriber(conn net.Conn) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+
+	// Find and remove this connection from all boards
+	for boardID, subscribers := range s.subscribers {
+		if ch, exists := subscribers[conn]; exists {
+			close(ch)
+			delete(subscribers, conn)
+
+			// Clean up empty board subscriptions
+			if len(subscribers) == 0 {
+				delete(s.subscribers, boardID)
+			}
+		}
+	}
 }

@@ -4,14 +4,19 @@ A powerful terminal-based Kanban board system with git workflow integration, fea
 
 ## Architecture
 
-This is a monorepo containing:
+This is a monorepo with a client-daemon architecture:
 
-- **cmd/mkanban** - Terminal UI client for viewing and managing the Kanban board
+- **cmd/mkanban** - Terminal UI client that connects to the daemon
 - **cmd/mkanbad** - Background daemon that manages board state and persistence
+- **internal/daemon** - Unix socket IPC server with real-time update support
+  - **protocol.go** - Request/response and notification protocol
+  - **server.go** - Daemon server with subscription management
+  - **client.go** - Client library for connecting to daemon
 - **internal/model** - Shared data models (Board, Column, Task)
 - **internal/storage** - File-based persistence layer
-- **internal/daemon** - Unix socket IPC server
 - **tui/** - TUI-specific components (view, update, styles)
+
+The TUI client automatically starts the daemon if it's not already running and subscribes to real-time board updates.
 
 ## Building
 
@@ -28,8 +33,10 @@ go build -o mkanbad ./cmd/mkanbad
 ## Features
 
 - ✅ **Multiple Boards** - Organize different projects or workflows
-- ✅ **Interactive TUI** - Full-featured terminal user interface
+- ✅ **Interactive TUI** - Full-featured terminal user interface with daemon integration
 - ✅ **Comprehensive CLI** - Complete command-line interface for all operations
+- ✅ **Daemon Architecture** - Background daemon for multi-client support and real-time updates
+- ✅ **Real-time Updates** - Live board updates across all connected TUI clients
 - ✅ **Git Integration** - Checkout branches for tasks automatically
 - ✅ **Task Management** - Priorities, tags, due dates, descriptions
 - ✅ **Automated Actions** - Time-based and event-based task automation
@@ -367,19 +374,29 @@ The daemon uses Unix sockets with JSON-based request/response protocol:
 
 **Request Types:**
 - `get_board` - Retrieve current board state
+- `list_boards` - List all boards
+- `create_board` - Create a new board
 - `add_task` - Add a new task
 - `move_task` - Move task between columns
 - `update_task` - Update task details
 - `delete_task` - Delete a task
 - `add_column` - Add a new column
 - `delete_column` - Remove a column
+- `get_active_board` - Get the active board for current session
+- `subscribe` - Subscribe to real-time board updates
+- `ping` - Health check
+
+**Real-time Updates:**
+- Clients can subscribe to board changes via persistent connections
+- The daemon broadcasts notifications when tasks are created, moved, updated, or deleted
+- All connected TUI clients receive updates automatically
 
 ## Next Steps
 
-- [ ] Integrate TUI client with daemon (currently runs standalone)
+- [x] Integrate TUI client with daemon
+- [x] Implement real-time updates when daemon notifies changes
 - [ ] Add task editing dialog in TUI
 - [ ] Add column management in TUI
-- [ ] Implement real-time updates when daemon notifies changes
-- [ ] Add systemd service file for daemon
-- [ ] Add task descriptions and metadata
-- [ ] Add task priorities and tags
+- [ ] Add systemd service file for daemon auto-start
+- [ ] Add configuration UI for daemon settings
+- [ ] Add support for multiple simultaneous TUI instances

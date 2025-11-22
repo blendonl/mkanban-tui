@@ -23,6 +23,11 @@ const (
 	RequestListActions     = "list_actions"
 	RequestEnableAction    = "enable_action"
 	RequestDisableAction   = "disable_action"
+
+	// Real-time update request types
+	RequestSubscribe       = "subscribe"
+	RequestUnsubscribe     = "unsubscribe"
+	RequestPing            = "ping"
 )
 
 // Request represents a client request to the daemon
@@ -136,3 +141,30 @@ type EnableActionPayload struct {
 type DisableActionPayload struct {
 	ActionID string `json:"action_id"`
 }
+
+// SubscribePayload contains data for subscribing to board updates
+type SubscribePayload struct {
+	BoardID string `json:"board_id"`
+}
+
+// UnsubscribePayload contains data for unsubscribing from board updates
+type UnsubscribePayload struct {
+	BoardID string `json:"board_id"`
+}
+
+// Notification represents a push notification from daemon to client
+type Notification struct {
+	Type    string      `json:"type"`
+	BoardID string      `json:"board_id,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+// Notification types
+const (
+	NotificationBoardUpdated = "board_updated"
+	NotificationTaskCreated  = "task_created"
+	NotificationTaskUpdated  = "task_updated"
+	NotificationTaskMoved    = "task_moved"
+	NotificationTaskDeleted  = "task_deleted"
+	NotificationPong         = "pong"
+)

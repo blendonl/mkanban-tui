@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+	"mkanban/internal/daemon"
 	"mkanban/tui"
 	"mkanban/tui/style"
 )
@@ -61,8 +62,17 @@ Examples:
 			}
 		}
 
-		// Load the board
-		boardDTO, err := container.GetBoardUseCase.Execute(ctx, selectedBoardID)
+		// Create daemon client
+		daemonClient := daemon.NewClient(cfg)
+
+		// Connect to daemon (will auto-start if needed)
+		if err := daemonClient.Connect(); err != nil {
+			return fmt.Errorf("failed to connect to daemon: %w", err)
+		}
+		defer daemonClient.Close()
+
+		// Load the board via daemon
+		boardDTO, err := daemonClient.GetBoard(ctx, selectedBoardID)
 		if err != nil {
 			return fmt.Errorf("failed to load board: %w", err)
 		}
@@ -71,14 +81,17 @@ Examples:
 			printer.Info("Launching TUI for board: %s", boardDTO.Name)
 		}
 
-		// Create TUI model
-		m := tui.NewModel(boardDTO, container)
+		// Create TUI model with daemon client
+		m := tui.NewModel(boardDTO, daemonClient, cfg, selectedBoardID)
 
 		// Start the program
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("error running TUI: %w", err)
 		}
+
+		// Cleanup subscription
+		daemonClient.Unsubscribe()
 
 		return nil
 	},

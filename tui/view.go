@@ -215,7 +215,7 @@ func (m Model) renderColumn(col dto.ColumnDTO, colIndex int, width int, viewport
 		isSelected := isFocused && i == m.focusedTask
 
 		// Render task card with all components
-		taskCard := renderTaskCard(task, width, isSelected, m.container.Config)
+		taskCard := renderTaskCard(task, width, isSelected, m.config)
 		tasks = append(tasks, taskCard)
 	}
 
@@ -230,8 +230,8 @@ func (m Model) renderColumn(col dto.ColumnDTO, colIndex int, width int, viewport
 	// Add placeholder if no tasks
 	if len(col.Tasks) == 0 {
 		emptyStyle := style.TaskStyle.Width(width)
-		if m.container.Config.TUI.Styles.ScrollIndicator.Foreground != "" {
-			emptyStyle = emptyStyle.Foreground(lipgloss.Color(m.container.Config.TUI.Styles.ScrollIndicator.Foreground))
+		if m.config.TUI.Styles.ScrollIndicator.Foreground != "" {
+			emptyStyle = emptyStyle.Foreground(lipgloss.Color(m.config.TUI.Styles.ScrollIndicator.Foreground))
 		}
 		tasks = append(tasks, emptyStyle.Render("(empty)"))
 	}

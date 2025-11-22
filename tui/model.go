@@ -3,13 +3,16 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"mkanban/internal/application/dto"
-	"mkanban/internal/di"
+	"mkanban/internal/daemon"
+	"mkanban/internal/infrastructure/config"
 )
 
 // Model represents the TUI state
 type Model struct {
 	board                  *dto.BoardDTO
-	container              *di.Container
+	daemonClient           *daemon.Client
+	config                 *config.Config
+	boardID                string
 	focusedColumn          int   // which column is currently selected
 	focusedTask            int   // which task in the current column is selected
 	scrollOffsets          []int // scroll offset for each column (vertical)
@@ -18,14 +21,26 @@ type Model struct {
 	height                 int
 }
 
+// BoardUpdateMsg is a message sent when the board is updated
+type BoardUpdateMsg struct {
+	board *dto.BoardDTO
+}
+
+// NotificationMsg is a message sent when a notification is received
+type NotificationMsg struct {
+	notification *daemon.Notification
+}
+
 // NewModel creates a new TUI model
-func NewModel(board *dto.BoardDTO, container *di.Container) Model {
+func NewModel(board *dto.BoardDTO, daemonClient *daemon.Client, cfg *config.Config, boardID string) Model {
 	// Initialize scroll offsets for each column
 	scrollOffsets := make([]int, len(board.Columns))
 
 	return Model{
 		board:         board,
-		container:     container,
+		daemonClient:  daemonClient,
+		config:        cfg,
+		boardID:       boardID,
 		focusedColumn: 0,
 		focusedTask:   0,
 		scrollOffsets: scrollOffsets,
@@ -34,7 +49,30 @@ func NewModel(board *dto.BoardDTO, container *di.Container) Model {
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
-	return nil
+	// Subscribe to board updates and start listening for notifications
+	return tea.Batch(
+		m.subscribeToBoard(),
+		m.waitForNotification(),
+	)
+}
+
+// subscribeToBoard subscribes to board updates
+func (m Model) subscribeToBoard() tea.Cmd {
+	return func() tea.Msg {
+		if err := m.daemonClient.Subscribe(m.boardID); err != nil {
+			// Subscription failed, but we can continue without real-time updates
+			return nil
+		}
+		return nil
+	}
+}
+
+// waitForNotification waits for a notification from the daemon
+func (m Model) waitForNotification() tea.Cmd {
+	return func() tea.Msg {
+		notif := <-m.daemonClient.Notifications()
+		return NotificationMsg{notification: notif}
+	}
 }
 
 // Helper to get task count in current column

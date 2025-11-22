@@ -11,6 +11,26 @@ import (
 // Update handles messages and updates the model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case NotificationMsg:
+		// Handle real-time update notification
+		if msg.notification.Type == "board_updated" || msg.notification.Type == "task_moved" {
+			// Reload the board
+			return m, m.reloadBoard()
+		}
+		// Continue waiting for next notification
+		return m, m.waitForNotification()
+
+	case BoardUpdateMsg:
+		// Board has been reloaded
+		m.board = msg.board
+		// Ensure scroll offsets array matches board columns
+		if len(m.scrollOffsets) != len(m.board.Columns) {
+			m.scrollOffsets = make([]int, len(m.board.Columns))
+		}
+		m.clampTaskFocus()
+		// Continue waiting for next notification
+		return m, m.waitForNotification()
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -146,14 +166,9 @@ func (m *Model) moveTask() {
 	// Get target column name
 	targetColumnName := m.board.Columns[m.focusedColumn+1].Name
 
-	// Use the MoveTask use case
+	// Use the daemon client to move the task
 	ctx := context.Background()
-	moveReq := dto.MoveTaskRequest{
-		TaskID:           task.ID,
-		TargetColumnName: targetColumnName,
-	}
-
-	updatedBoard, err := m.container.MoveTaskUseCase.Execute(ctx, m.board.ID, moveReq)
+	updatedBoard, err := m.daemonClient.MoveTask(ctx, m.board.ID, task.ID, targetColumnName)
 	if err != nil {
 		// Handle error (for now, just return)
 		return
@@ -188,7 +203,7 @@ func (m *Model) addTask() {
 	// Get current column name
 	columnName := m.board.Columns[m.focusedColumn].Name
 
-	// Use the CreateTask use case
+	// Use the daemon client to create a task
 	ctx := context.Background()
 	createReq := dto.CreateTaskRequest{
 		Title:       "New Task",
@@ -197,14 +212,14 @@ func (m *Model) addTask() {
 		ColumnName:  columnName,
 	}
 
-	_, err := m.container.CreateTaskUseCase.Execute(ctx, m.board.ID, createReq)
+	_, err := m.daemonClient.CreateTask(ctx, m.board.ID, createReq)
 	if err != nil {
 		// Handle error (for now, just return)
 		return
 	}
 
 	// Reload the board to get updated state
-	updatedBoard, err := m.container.GetBoardUseCase.Execute(ctx, m.board.ID)
+	updatedBoard, err := m.daemonClient.GetBoard(ctx, m.board.ID)
 	if err != nil {
 		return
 	}
@@ -226,6 +241,18 @@ func (m *Model) addTask() {
 		maxVisibleTasks = 1
 	}
 	m.updateScroll(maxVisibleTasks)
+}
+
+// reloadBoard reloads the board from the daemon
+func (m Model) reloadBoard() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		board, err := m.daemonClient.GetBoard(ctx, m.boardID)
+		if err != nil {
+			return nil
+		}
+		return BoardUpdateMsg{board: board}
+	}
 }
 
 // deleteTask removes the currently focused task
