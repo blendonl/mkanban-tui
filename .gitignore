@@ -1,2 +1,6 @@
-mkanban
-mkanbad
+/mkanban
+/mkanbad
+*.exe
+*.dll
+*.so
+*.dylib
