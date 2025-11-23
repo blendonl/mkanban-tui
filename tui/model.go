@@ -63,7 +63,6 @@ func doTick() tea.Cmd {
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
-<<<<<<< HEAD
 	// Subscribe to board updates and start listening for notifications
 	return tea.Batch(
 		m.subscribeToBoard(),
@@ -88,10 +87,6 @@ func (m Model) waitForNotification() tea.Cmd {
 		notif := <-m.daemonClient.Notifications()
 		return NotificationMsg{notification: notif}
 	}
-=======
-	// Start the ticker for periodic board refresh checks
-	return doTick()
->>>>>>> claude/fix-tmux-board-switch-01FJynMA7aBmLF3SXbdmAQyk
 }
 
 // Helper to get task count in current column
