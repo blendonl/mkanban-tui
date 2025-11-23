@@ -15,11 +15,12 @@ optdepends=(
 provides=('mkanban' 'mkanbad')
 conflicts=('mkanban' 'mkanbad')
 backup=('etc/mkanban/config.yaml')
-source=("git+${url}.git#tag=v${pkgver}")
-sha256sums=('SKIP')
 
-# For local builds, use this instead:
-# source=("${pkgname}::git+file://$(pwd)")
+# For release builds from GitHub tag:
+# source=("git+${url}.git#tag=v${pkgver}")
+# For local builds from current directory:
+source=("${pkgname}::git+file://${PWD}")
+sha256sums=('SKIP')
 
 build() {
     cd "${srcdir}/${pkgname}"
@@ -29,6 +30,10 @@ build() {
     export CGO_CXXFLAGS="${CXXFLAGS}"
     export CGO_LDFLAGS="${LDFLAGS}"
     export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
+
+    # Download dependencies first
+    go mod download
+    go mod verify
 
     # Build TUI client
     go build -o mkanban ./cmd/mkanban
