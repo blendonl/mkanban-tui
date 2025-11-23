@@ -2,11 +2,55 @@ package tui
 
 import (
 	"context"
+	"os"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"mkanban/internal/application/dto"
+	"mkanban/internal/daemon"
 )
+
+// boardRefreshMsg is sent when a board refresh is completed
+type boardRefreshMsg struct {
+	board *dto.BoardDTO
+}
+
+// checkBoardChange checks if the active board has changed
+func checkBoardChange(m Model) tea.Cmd {
+	return func() tea.Msg {
+		// Only check if we're in tmux
+		if os.Getenv("TMUX") == "" {
+			return nil
+		}
+
+		// Try to get active board from daemon
+		client := daemon.NewClient(m.container.Config)
+
+		// Check if daemon is running
+		if err := client.Ping(); err != nil {
+			return nil
+		}
+
+		// Get active board ID
+		activeBoardID, err := client.GetActiveBoard()
+		if err != nil || activeBoardID == "" {
+			return nil
+		}
+
+		// Check if board changed
+		if activeBoardID != m.lastBoardID {
+			// Board changed, reload it
+			ctx := context.Background()
+			newBoard, err := m.container.GetBoardUseCase.Execute(ctx, activeBoardID)
+			if err != nil {
+				return nil
+			}
+			return boardRefreshMsg{board: newBoard}
+		}
+
+		return nil
+	}
+}
 
 // Update handles messages and updates the model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -30,7 +74,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clampTaskFocus()
 		// Continue waiting for next notification
 		return m, m.waitForNotification()
-
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height

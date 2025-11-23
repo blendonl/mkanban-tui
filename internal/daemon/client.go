@@ -25,6 +25,7 @@ type Client struct {
 	notifChan      chan *Notification
 	stopChan       chan struct{}
 	isSubscribed   bool
+	socketPath string
 }
 
 // NewClient creates a new daemon client

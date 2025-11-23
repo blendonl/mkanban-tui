@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"mkanban/cmd/mkanban/output"
+	"mkanban/internal/daemon"
 	"mkanban/internal/di"
 	"mkanban/internal/infrastructure/config"
 )
@@ -188,7 +189,19 @@ func getActiveBoardFromSession(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("not in tmux session")
 	}
 
-	// Try to get from daemon
-	// This will be implemented when we add session commands
-	return "", fmt.Errorf("session tracking not yet implemented")
+	// Create daemon client
+	client := daemon.NewClient(cfg)
+
+	// Check if daemon is running
+	if err := client.Ping(); err != nil {
+		return "", fmt.Errorf("daemon not running: %w", err)
+	}
+
+	// Get active board from daemon
+	boardID, err := client.GetActiveBoard()
+	if err != nil {
+		return "", fmt.Errorf("failed to get active board: %w", err)
+	}
+
+	return boardID, nil
 }

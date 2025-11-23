@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"mkanban/internal/application/dto"
 	"mkanban/internal/daemon"
@@ -19,6 +21,7 @@ type Model struct {
 	horizontalScrollOffset int   // horizontal scroll offset for columns
 	width                  int
 	height                 int
+	lastBoardID            string // track the last board ID to detect changes
 }
 
 // BoardUpdateMsg is a message sent when the board is updated
@@ -44,11 +47,23 @@ func NewModel(board *dto.BoardDTO, daemonClient *daemon.Client, cfg *config.Conf
 		focusedColumn: 0,
 		focusedTask:   0,
 		scrollOffsets: scrollOffsets,
+		lastBoardID:   board.ID,
 	}
+}
+
+// tickMsg is sent when the ticker fires
+type tickMsg time.Time
+
+// doTick returns a command that waits for a tick
+func doTick() tea.Cmd {
+	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
+<<<<<<< HEAD
 	// Subscribe to board updates and start listening for notifications
 	return tea.Batch(
 		m.subscribeToBoard(),
@@ -73,6 +88,10 @@ func (m Model) waitForNotification() tea.Cmd {
 		notif := <-m.daemonClient.Notifications()
 		return NotificationMsg{notification: notif}
 	}
+=======
+	// Start the ticker for periodic board refresh checks
+	return doTick()
+>>>>>>> claude/fix-tmux-board-switch-01FJynMA7aBmLF3SXbdmAQyk
 }
 
 // Helper to get task count in current column
