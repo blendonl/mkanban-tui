@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"mkanban/internal/application/dto"
 	"mkanban/internal/di"
@@ -16,6 +18,7 @@ type Model struct {
 	horizontalScrollOffset int   // horizontal scroll offset for columns
 	width                  int
 	height                 int
+	lastBoardID            string // track the last board ID to detect changes
 }
 
 // NewModel creates a new TUI model
@@ -29,12 +32,24 @@ func NewModel(board *dto.BoardDTO, container *di.Container) Model {
 		focusedColumn: 0,
 		focusedTask:   0,
 		scrollOffsets: scrollOffsets,
+		lastBoardID:   board.ID,
 	}
+}
+
+// tickMsg is sent when the ticker fires
+type tickMsg time.Time
+
+// doTick returns a command that waits for a tick
+func doTick() tea.Cmd {
+	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
-	return nil
+	// Start the ticker for periodic board refresh checks
+	return doTick()
 }
 
 // Helper to get task count in current column
