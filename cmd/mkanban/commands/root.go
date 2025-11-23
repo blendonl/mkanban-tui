@@ -193,12 +193,12 @@ func getActiveBoardFromSession(ctx context.Context) (string, error) {
 	client := daemon.NewClient(cfg)
 
 	// Check if daemon is running
-	if err := client.Ping(); err != nil {
-		return "", fmt.Errorf("daemon not running: %w", err)
+	if !client.IsHealthy() {
+		return "", fmt.Errorf("daemon not running")
 	}
 
 	// Get active board from daemon
-	boardID, err := client.GetActiveBoard()
+	boardID, err := client.GetActiveBoard(context.Background())
 	if err != nil {
 		return "", fmt.Errorf("failed to get active board: %w", err)
 	}

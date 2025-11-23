@@ -24,15 +24,16 @@ func checkBoardChange(m Model) tea.Cmd {
 		}
 
 		// Try to get active board from daemon
-		client := daemon.NewClient(m.container.Config)
+		client := daemon.NewClient(m.config)
 
 		// Check if daemon is running
-		if err := client.Ping(); err != nil {
+		if !client.IsHealthy() {
 			return nil
 		}
 
 		// Get active board ID
-		activeBoardID, err := client.GetActiveBoard()
+		ctx := context.Background()
+		activeBoardID, err := client.GetActiveBoard(ctx)
 		if err != nil || activeBoardID == "" {
 			return nil
 		}
@@ -40,8 +41,7 @@ func checkBoardChange(m Model) tea.Cmd {
 		// Check if board changed
 		if activeBoardID != m.lastBoardID {
 			// Board changed, reload it
-			ctx := context.Background()
-			newBoard, err := m.container.GetBoardUseCase.Execute(ctx, activeBoardID)
+			newBoard, err := client.GetBoard(ctx, activeBoardID)
 			if err != nil {
 				return nil
 			}
