@@ -98,18 +98,29 @@ func (t *TaskID) Equal(other *TaskID) bool {
 
 // GenerateBoardPrefix creates a 3-letter prefix from a board name
 func GenerateBoardPrefix(boardName string) string {
-	// Remove non-alphanumeric characters and convert to uppercase
 	cleaned := regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(boardName, "")
 	upper := strings.ToUpper(cleaned)
 
 	if len(upper) == 0 {
-		return "BRD" // Default prefix
+		return "BRD"
 	}
 
 	if len(upper) >= 3 {
 		return upper[:3]
 	}
 
-	// Pad with 'X' if less than 3 characters
 	return upper + strings.Repeat("X", 3-len(upper))
+}
+
+// GenerateSlug creates a URL-safe slug from a name
+func GenerateSlug(name string) string {
+	lower := strings.ToLower(name)
+	cleaned := regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(lower, "-")
+	cleaned = strings.Trim(cleaned, "-")
+
+	if cleaned == "" {
+		return "project"
+	}
+
+	return cleaned
 }

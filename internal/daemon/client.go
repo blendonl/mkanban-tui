@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -217,8 +218,16 @@ func (c *Client) ListBoards(ctx context.Context) ([]dto.BoardDTO, error) {
 
 // GetActiveBoard retrieves the active board ID from the daemon
 func (c *Client) GetActiveBoard(ctx context.Context) (string, error) {
+	payload := GetActiveBoardPayload{}
+
+	// Detect current tmux session name
+	if sessionName := getCurrentTmuxSession(); sessionName != "" {
+		payload.SessionName = sessionName
+	}
+
 	req := &Request{
-		Type: RequestGetActiveBoard,
+		Type:    RequestGetActiveBoard,
+		Payload: payload,
 	}
 
 	resp, err := c.sendRequest(req)
@@ -238,6 +247,21 @@ func (c *Client) GetActiveBoard(ctx context.Context) (string, error) {
 	}
 
 	return result["board_id"], nil
+}
+
+// getCurrentTmuxSession gets the current tmux session name
+func getCurrentTmuxSession() string {
+	if os.Getenv("TMUX") == "" {
+		return ""
+	}
+
+	cmd := exec.Command("tmux", "display-message", "-p", "#{session_name}")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(output))
 }
 
 // CreateBoard creates a new board
@@ -554,4 +578,18 @@ func (c *Client) Unsubscribe() error {
 // Notifications returns the notification channel
 func (c *Client) Notifications() <-chan *Notification {
 	return c.notifChan
+}
+
+// SendRequest sends a generic request to the daemon and returns the response
+func (c *Client) SendRequest(reqType string, payload interface{}) (*Response, error) {
+	if err := c.Connect(); err != nil {
+		return nil, err
+	}
+
+	req := &Request{
+		Type:    reqType,
+		Payload: payload,
+	}
+
+	return c.sendRequest(req)
 }

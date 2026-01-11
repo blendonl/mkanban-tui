@@ -164,8 +164,12 @@ Examples:
 
 		// Format output
 		switch outputFormat {
+		case "fzf":
+			for _, task := range filteredTasks {
+				fmt.Printf("%s\t%s\n", task.ShortID, task.Title)
+			}
+			return nil
 		case "path":
-			// Path format: path :: title
 			for _, task := range filteredTasks {
 				fmt.Printf("%s :: %s\n", task.FilePath, task.Title)
 			}
@@ -869,6 +873,75 @@ Examples:
 	},
 }
 
+var taskCurrentCmd = &cobra.Command{
+	Use:   "current",
+	Short: "Show current in-progress task(s)",
+	Long: `Show tasks currently in the "In Progress" column.
+
+Returns the task(s) you're currently working on.
+
+Examples:
+  # Show current task
+  mkanban task current
+
+  # Output for fzf
+  mkanban task current -o fzf
+
+  # JSON output
+  mkanban task current -o json`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := getContext()
+
+		boardID, err := getBoardID(ctx)
+		if err != nil {
+			return err
+		}
+
+		board, err := container.GetBoardUseCase.Execute(ctx, boardID)
+		if err != nil {
+			return fmt.Errorf("failed to get board: %w", err)
+		}
+
+		var inProgressTasks []dto.TaskDTO
+		for _, col := range board.Columns {
+			if col.Name == "In Progress" {
+				inProgressTasks = col.Tasks
+				break
+			}
+		}
+
+		if len(inProgressTasks) == 0 {
+			if outputFormat == "json" || outputFormat == "yaml" {
+				return formatter.Print([]dto.TaskDTO{})
+			}
+			printer.Info("No tasks in progress")
+			return nil
+		}
+
+		switch outputFormat {
+		case "fzf":
+			for _, task := range inProgressTasks {
+				fmt.Printf("%s\t%s\n", task.ShortID, task.Title)
+			}
+		case "json", "yaml":
+			return formatter.Print(inProgressTasks)
+		default:
+			if len(inProgressTasks) == 1 {
+				task := inProgressTasks[0]
+				printer.Println("%s %s", task.ShortID, task.Title)
+			} else {
+				printer.Header("In Progress (%d tasks)", len(inProgressTasks))
+				fmt.Println()
+				for _, task := range inProgressTasks {
+					printer.Println("  %s %s", task.ShortID, task.Title)
+				}
+			}
+		}
+
+		return nil
+	},
+}
+
 // taskShowCmd shows a task with context
 var taskShowCmd = &cobra.Command{
 	Use:   "show <task-id>",
@@ -1075,6 +1148,7 @@ func init() {
 	taskCmd.AddCommand(taskDeleteCmd)
 	taskCmd.AddCommand(taskCheckoutCmd)
 	taskCmd.AddCommand(taskShowCmd)
+	taskCmd.AddCommand(taskCurrentCmd)
 
 	// taskListCmd flags
 	taskListCmd.Flags().String("column", "", "Filter by column name")

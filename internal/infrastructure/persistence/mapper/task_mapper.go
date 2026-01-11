@@ -16,16 +16,20 @@ type GitMetadata struct {
 
 // TaskStorage represents task storage format
 type TaskStorage struct {
-	ID            string       `yaml:"id"`
-	ParentID      string       `yaml:"parent_id,omitempty"`
-	Created       time.Time    `yaml:"created"`
-	Modified      time.Time    `yaml:"modified"`
-	DueDate       *time.Time   `yaml:"due_date,omitempty"`
-	CompletedDate *time.Time   `yaml:"completed_date,omitempty"`
-	Priority      string       `yaml:"priority"`
-	Status        string       `yaml:"status"`
-	Tags          []string     `yaml:"tags,omitempty"`
-	Git           *GitMetadata `yaml:"git,omitempty"`
+	ID            string         `yaml:"id"`
+	ParentID      string         `yaml:"parent_id,omitempty"`
+	Created       time.Time      `yaml:"created"`
+	Modified      time.Time      `yaml:"modified"`
+	DueDate       *time.Time     `yaml:"due_date,omitempty"`
+	CompletedDate *time.Time     `yaml:"completed_date,omitempty"`
+	Priority      string         `yaml:"priority"`
+	Status        string         `yaml:"status"`
+	Tags          []string       `yaml:"tags,omitempty"`
+	Git           *GitMetadata   `yaml:"git,omitempty"`
+	ScheduledDate *time.Time     `yaml:"scheduled_date,omitempty"`
+	ScheduledTime *time.Time     `yaml:"scheduled_time,omitempty"`
+	TimeBlock     *time.Duration `yaml:"time_block,omitempty"`
+	TaskType      string         `yaml:"task_type,omitempty"`
 }
 
 // TaskToStorage converts a Task entity to storage format
@@ -40,6 +44,13 @@ func TaskToStorage(task *entity.Task) (*TaskStorage, []byte, error) {
 		Priority:      task.Priority().String(),
 		Status:        task.Status().String(),
 		Tags:          task.Tags(),
+		ScheduledDate: task.ScheduledDate(),
+		ScheduledTime: task.ScheduledTime(),
+		TimeBlock:     task.TimeBlock(),
+	}
+
+	if task.TaskType() != entity.TaskTypeRegular {
+		storage.TaskType = string(task.TaskType())
 	}
 
 	// Store parent ID if this is a subtask
@@ -113,6 +124,18 @@ func TaskFromStorage(metadata *TaskStorage, markdownContent []byte, taskID *valu
 	// Parse optional dates
 	if metadata.DueDate != nil {
 		_ = task.SetDueDate(*metadata.DueDate)
+	}
+	if metadata.ScheduledDate != nil {
+		task.SetScheduledDate(*metadata.ScheduledDate)
+	}
+	if metadata.ScheduledTime != nil {
+		task.SetScheduledTime(*metadata.ScheduledTime)
+	}
+	if metadata.TimeBlock != nil {
+		task.SetTimeBlock(*metadata.TimeBlock)
+	}
+	if metadata.TaskType != "" {
+		task.SetTaskType(entity.TaskType(metadata.TaskType))
 	}
 
 	// Parse tags

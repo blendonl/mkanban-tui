@@ -5,6 +5,7 @@ import "time"
 // BoardDTO represents a board data transfer object
 type BoardDTO struct {
 	ID          string      `json:"id"`
+	ProjectID   string      `json:"project_id,omitempty"`
 	Name        string      `json:"name"`
 	Prefix      string      `json:"prefix"`
 	Description string      `json:"description"`

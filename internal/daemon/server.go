@@ -7,23 +7,33 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
+	"time"
 
+	"github.com/google/uuid"
 	"mkanban/internal/application/dto"
 	"mkanban/internal/di"
+	"mkanban/internal/domain/entity"
+	"mkanban/internal/domain/valueobject"
 	"mkanban/internal/infrastructure/config"
+	"mkanban/pkg/slug"
 )
 
 // Server represents the daemon server
 type Server struct {
-	container      *di.Container
-	config         *config.Config
-	listener       net.Listener
-	sessionManager *SessionManager
-	actionManager  *ActionManager
-	mu             sync.RWMutex
-	subscribers    map[string]map[net.Conn]chan *Notification // boardID -> conn -> channel
-	subMu          sync.RWMutex
+	container           *di.Container
+	config              *config.Config
+	listener            net.Listener
+	sessionManager      *SessionManager
+	actionManager       *ActionManager
+	timeTrackingManager *TimeTrackingManager
+	mu                  sync.RWMutex
+	subscribers         map[string]map[net.Conn]chan *Notification // boardID -> conn -> channel
+	subMu               sync.RWMutex
 }
 
 // NewServer creates a new daemon server
@@ -43,6 +53,10 @@ func NewServer(cfg *config.Config) (*Server, error) {
 
 // Start starts the daemon server
 func (s *Server) Start() error {
+	if err := s.acquireLock(); err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 
 	// Initialize session manager if session tracking use cases are available
@@ -185,9 +199,37 @@ func (s *Server) handleRequest(req *Request) *Response {
 	case RequestDeleteColumn:
 		return s.handleDeleteColumn(ctx, req)
 	case RequestGetActiveBoard:
-		return s.handleGetActiveBoard(ctx)
+		return s.handleGetActiveBoard(ctx, req)
 	case RequestPing:
 		return &Response{Success: true, Data: "pong"}
+
+	case RequestStartTimer:
+		return s.handleStartTimer(ctx, req)
+	case RequestStopTimer:
+		return s.handleStopTimer(ctx, req)
+	case RequestGetActiveTimers:
+		return s.handleGetActiveTimers(ctx)
+	case RequestListTimeLogs:
+		return s.handleListTimeLogs(ctx, req)
+	case RequestAddTimeEntry:
+		return s.handleAddTimeEntry(ctx, req)
+
+	case RequestCreateProject:
+		return s.handleCreateProject(ctx, req)
+	case RequestGetProject:
+		return s.handleGetProject(ctx, req)
+	case RequestListProjects:
+		return s.handleListProjects(ctx)
+	case RequestUpdateProject:
+		return s.handleUpdateProject(ctx, req)
+	case RequestDeleteProject:
+		return s.handleDeleteProject(ctx, req)
+
+	case RequestScheduleTask:
+		return s.handleScheduleTask(ctx, req)
+	case RequestCreateMeeting:
+		return s.handleCreateMeeting(ctx, req)
+
 	default:
 		return &Response{
 			Success: false,
@@ -379,7 +421,7 @@ func (s *Server) handleDeleteColumn(ctx context.Context, req *Request) *Response
 }
 
 // handleGetActiveBoard returns the board ID for the active session
-func (s *Server) handleGetActiveBoard(ctx context.Context) *Response {
+func (s *Server) handleGetActiveBoard(ctx context.Context, req *Request) *Response {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -388,7 +430,15 @@ func (s *Server) handleGetActiveBoard(ctx context.Context) *Response {
 		return &Response{Success: false, Error: "session tracking not available"}
 	}
 
-	boardID, err := s.container.GetActiveSessionBoardUseCase.Execute(ctx)
+	var sessionName string
+	if req != nil && req.Payload != nil {
+		var payload GetActiveBoardPayload
+		if err := s.decodePayload(req.Payload, &payload); err == nil {
+			sessionName = payload.SessionName
+		}
+	}
+
+	boardID, err := s.container.GetActiveSessionBoardUseCase.Execute(ctx, sessionName)
 	if err != nil {
 		return &Response{Success: false, Error: err.Error()}
 	}
@@ -422,6 +472,13 @@ func (s *Server) sendError(encoder *json.Encoder, message string) {
 
 // Stop stops the daemon server
 func (s *Server) Stop() error {
+	// Stop time tracking manager if it exists
+	if s.timeTrackingManager != nil {
+		if err := s.timeTrackingManager.Stop(); err != nil {
+			fmt.Printf("Error stopping time tracking manager: %v\n", err)
+		}
+	}
+
 	// Stop action manager if it exists
 	if s.actionManager != nil {
 		if err := s.actionManager.Stop(); err != nil {
@@ -436,11 +493,56 @@ func (s *Server) Stop() error {
 		}
 	}
 
+	s.releaseLock()
+
 	// Close the listener
 	if s.listener != nil {
 		return s.listener.Close()
 	}
 	return nil
+}
+
+func (s *Server) lockFilePath() string {
+	return filepath.Join(s.config.Daemon.SocketDir, "mkanban.pid")
+}
+
+func (s *Server) acquireLock() error {
+	lockPath := s.lockFilePath()
+
+	if err := os.MkdirAll(s.config.Daemon.SocketDir, 0755); err != nil {
+		return fmt.Errorf("failed to create socket directory: %w", err)
+	}
+
+	data, err := os.ReadFile(lockPath)
+	if err == nil {
+		var pid int
+		if _, err := fmt.Sscanf(string(data), "%d", &pid); err == nil {
+			if s.isProcessRunning(pid) {
+				return fmt.Errorf("daemon already running (pid %d)", pid)
+			}
+		}
+		os.Remove(lockPath)
+	}
+
+	pid := os.Getpid()
+	if err := os.WriteFile(lockPath, []byte(fmt.Sprintf("%d", pid)), 0644); err != nil {
+		return fmt.Errorf("failed to write lock file: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Server) releaseLock() {
+	os.Remove(s.lockFilePath())
+}
+
+func (s *Server) isProcessRunning(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
 }
 
 // GetSocketPath returns the socket path from config
@@ -522,4 +624,582 @@ func (s *Server) cleanupSubscriber(conn net.Conn) {
 			}
 		}
 	}
+}
+
+func (s *Server) handleStartTimer(ctx context.Context, req *Request) *Response {
+	if s.timeTrackingManager == nil {
+		return &Response{Success: false, Error: "time tracking not available"}
+	}
+
+	var payload StartTimerPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	log, err := s.timeTrackingManager.StartTimer(ctx, payload.ProjectID, nil, payload.Description)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":         log.ID(),
+		"project_id": log.ProjectID(),
+		"start_time": log.StartTime(),
+		"running":    log.IsRunning(),
+	}}
+}
+
+func (s *Server) handleStopTimer(ctx context.Context, req *Request) *Response {
+	if s.timeTrackingManager == nil {
+		return &Response{Success: false, Error: "time tracking not available"}
+	}
+
+	var payload StopTimerPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	log, err := s.timeTrackingManager.StopTimer(ctx, payload.ProjectID, nil)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":         log.ID(),
+		"project_id": log.ProjectID(),
+		"start_time": log.StartTime(),
+		"end_time":   log.EndTime(),
+		"duration":   log.Duration().Seconds(),
+	}}
+}
+
+func (s *Server) handleGetActiveTimers(ctx context.Context) *Response {
+	if s.timeTrackingManager == nil {
+		return &Response{Success: false, Error: "time tracking not available"}
+	}
+
+	timers := s.timeTrackingManager.GetActiveTimers()
+	result := make([]map[string]interface{}, 0, len(timers))
+
+	for _, t := range timers {
+		entry := map[string]interface{}{
+			"id":         t.ID(),
+			"project_id": t.ProjectID(),
+			"source":     t.Source().String(),
+			"start_time": t.StartTime(),
+			"duration":   t.Duration().Seconds(),
+		}
+		if t.TaskID() != nil {
+			entry["task_id"] = t.TaskID().String()
+		}
+		result = append(result, entry)
+	}
+
+	return &Response{Success: true, Data: result}
+}
+
+func (s *Server) handleListTimeLogs(ctx context.Context, req *Request) *Response {
+	var payload ListTimeLogsPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	var startDate, endDate *time.Time
+	if payload.StartDate != nil {
+		t, err := time.Parse("2006-01-02", *payload.StartDate)
+		if err != nil {
+			return &Response{Success: false, Error: "invalid start_date format, use YYYY-MM-DD"}
+		}
+		startDate = &t
+	}
+	if payload.EndDate != nil {
+		t, err := time.Parse("2006-01-02", *payload.EndDate)
+		if err != nil {
+			return &Response{Success: false, Error: "invalid end_date format, use YYYY-MM-DD"}
+		}
+		endDate = &t
+	}
+
+	var logs []*entity.TimeLog
+	var err error
+
+	if payload.TaskID != nil {
+		var taskID *valueobject.TaskID
+		taskID, err = valueobject.ParseTaskID(*payload.TaskID)
+		if err != nil {
+			return &Response{Success: false, Error: "invalid task_id format"}
+		}
+		logs, err = s.container.TimeLogRepo.FindByTask(ctx, taskID)
+	} else if payload.ProjectID != "" && startDate != nil && endDate != nil {
+		logs, err = s.container.TimeLogRepo.FindByDateRange(ctx, payload.ProjectID, *startDate, *endDate)
+	} else if payload.ProjectID != "" {
+		logs, err = s.container.TimeLogRepo.FindByProject(ctx, payload.ProjectID)
+	} else {
+		logs, err = s.container.TimeLogRepo.FindRunning(ctx)
+	}
+
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	result := make([]map[string]interface{}, 0, len(logs))
+	for _, log := range logs {
+		entry := map[string]interface{}{
+			"id":          log.ID(),
+			"project_id":  log.ProjectID(),
+			"source":      log.Source().String(),
+			"start_time":  log.StartTime(),
+			"description": log.Description(),
+			"running":     log.IsRunning(),
+		}
+		if log.TaskID() != nil {
+			entry["task_id"] = log.TaskID().String()
+		}
+		if log.EndTime() != nil {
+			entry["end_time"] = log.EndTime()
+			entry["duration"] = log.Duration().Seconds()
+		}
+		result = append(result, entry)
+	}
+
+	return &Response{Success: true, Data: result}
+}
+
+func (s *Server) handleAddTimeEntry(ctx context.Context, req *Request) *Response {
+	var payload AddTimeEntryPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	startTime, err := time.Parse(time.RFC3339, payload.StartTime)
+	if err != nil {
+		return &Response{Success: false, Error: "invalid start_time format, use RFC3339"}
+	}
+
+	id := uuid.New().String()
+	duration := time.Duration(payload.Duration) * time.Second
+	endTime := startTime.Add(duration)
+
+	log := entity.NewTimeLogWithDuration(
+		id,
+		payload.ProjectID,
+		payload.TaskID,
+		entity.TimeLogSourceManual,
+		startTime,
+		endTime,
+		payload.Description,
+	)
+
+	if err := s.container.TimeLogRepo.Save(ctx, log); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":          log.ID(),
+		"project_id":  log.ProjectID(),
+		"start_time":  log.StartTime(),
+		"end_time":    log.EndTime(),
+		"duration":    log.Duration().Seconds(),
+		"description": log.Description(),
+	}}
+}
+
+func (s *Server) handleCreateProject(ctx context.Context, req *Request) *Response {
+	var payload CreateProjectPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	id := uuid.New().String()
+	project, err := entity.NewProject(id, payload.Name, payload.Description)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	if payload.WorkingDir != "" {
+		project.SetWorkingDir(payload.WorkingDir)
+	}
+
+	if err := s.container.ProjectRepo.Save(ctx, project); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":   project.ID(),
+		"name": project.Name(),
+		"slug": project.Slug(),
+	}}
+}
+
+func (s *Server) handleGetProject(ctx context.Context, req *Request) *Response {
+	var payload GetProjectPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	project, err := s.container.ProjectRepo.FindByID(ctx, payload.ProjectID)
+	if err != nil {
+		project, err = s.container.ProjectRepo.FindBySlug(ctx, payload.ProjectID)
+		if err != nil {
+			return &Response{Success: false, Error: "project not found"}
+		}
+	}
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":          project.ID(),
+		"name":        project.Name(),
+		"slug":        project.Slug(),
+		"description": project.Description(),
+		"working_dir": project.WorkingDir(),
+		"archived":    project.Archived(),
+		"created_at":  project.CreatedAt(),
+		"modified_at": project.ModifiedAt(),
+	}}
+}
+
+func (s *Server) handleListProjects(ctx context.Context) *Response {
+	projects, err := s.container.ProjectRepo.FindAll(ctx)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	result := make([]map[string]interface{}, 0, len(projects))
+	for _, p := range projects {
+		result = append(result, map[string]interface{}{
+			"id":          p.ID(),
+			"name":        p.Name(),
+			"slug":        p.Slug(),
+			"description": p.Description(),
+			"archived":    p.Archived(),
+			"board_count": p.BoardCount(),
+			"task_count":  p.TotalTaskCount(),
+		})
+	}
+
+	return &Response{Success: true, Data: result}
+}
+
+func (s *Server) handleUpdateProject(ctx context.Context, req *Request) *Response {
+	var payload UpdateProjectPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	project, err := s.container.ProjectRepo.FindByID(ctx, payload.ProjectID)
+	if err != nil {
+		return &Response{Success: false, Error: "project not found"}
+	}
+
+	if payload.Name != nil {
+		if err := project.UpdateName(*payload.Name); err != nil {
+			return &Response{Success: false, Error: err.Error()}
+		}
+	}
+	if payload.Description != nil {
+		project.UpdateDescription(*payload.Description)
+	}
+	if payload.WorkingDir != nil {
+		project.SetWorkingDir(*payload.WorkingDir)
+	}
+	if payload.Archived != nil {
+		if *payload.Archived {
+			project.Archive()
+		} else {
+			project.Unarchive()
+		}
+	}
+
+	if err := s.container.ProjectRepo.Save(ctx, project); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":   project.ID(),
+		"name": project.Name(),
+		"slug": project.Slug(),
+	}}
+}
+
+func (s *Server) handleDeleteProject(ctx context.Context, req *Request) *Response {
+	var payload DeleteProjectPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	if err := s.container.ProjectRepo.Delete(ctx, payload.ProjectID); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	return &Response{Success: true, Data: "project deleted"}
+}
+
+func (s *Server) handleScheduleTask(ctx context.Context, req *Request) *Response {
+	fmt.Println("[Schedule] Decoding payload...")
+	var payload ScheduleTaskPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+	fmt.Printf("[Schedule] Task ID: %s, Date: %s\n", payload.TaskID, payload.Date)
+
+	scheduledDate, err := time.Parse("2006-01-02", payload.Date)
+	if err != nil {
+		return &Response{Success: false, Error: "invalid date format, use YYYY-MM-DD"}
+	}
+
+	fmt.Println("[Schedule] Finding task...")
+	var board *entity.Board
+	var task *entity.Task
+	var columnName string
+
+	taskID, err := valueobject.ParseTaskID(payload.TaskID)
+	if err == nil {
+		fmt.Println("[Schedule] Using full ID...")
+		board, task, columnName, err = s.findTaskAcrossBoards(ctx, taskID)
+	} else {
+		fmt.Println("[Schedule] Using short ID...")
+		board, task, columnName, err = s.findTaskByShortID(ctx, payload.TaskID)
+	}
+	fmt.Printf("[Schedule] Find result: err=%v\n", err)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	fmt.Println("[Schedule] Setting scheduled date...")
+	task.SetScheduledDate(scheduledDate)
+
+	if payload.Time != nil {
+		fmt.Println("[Schedule] Setting scheduled time...")
+		scheduledTime, err := time.Parse("15:04", *payload.Time)
+		if err != nil {
+			return &Response{Success: false, Error: "invalid time format, use HH:MM"}
+		}
+		fullTime := time.Date(
+			scheduledDate.Year(), scheduledDate.Month(), scheduledDate.Day(),
+			scheduledTime.Hour(), scheduledTime.Minute(), 0, 0,
+			scheduledDate.Location(),
+		)
+		task.SetScheduledTime(fullTime)
+	}
+
+	if payload.Duration != nil {
+		fmt.Println("[Schedule] Setting duration...")
+		duration, err := time.ParseDuration(*payload.Duration)
+		if err != nil {
+			return &Response{Success: false, Error: "invalid duration format, use e.g., 2h, 30m"}
+		}
+		task.SetTimeBlock(duration)
+	}
+
+	fmt.Printf("[Schedule] Board ID: %s, Column: %s\n", board.ID(), columnName)
+	fmt.Println("[Schedule] Saving task...")
+	if err := s.container.BoardRepo.SaveTask(ctx, board.ID(), columnName, task); err != nil {
+		fmt.Printf("[Schedule] Save error: %v\n", err)
+		return &Response{Success: false, Error: err.Error()}
+	}
+	fmt.Println("[Schedule] Task saved!")
+
+	fmt.Println("[Schedule] Notifying subscribers...")
+	s.notifySubscribers(board.ID(), &Notification{
+		Type:    NotificationTaskUpdated,
+		BoardID: board.ID(),
+		Data:    task,
+	})
+	fmt.Println("[Schedule] Returning response...")
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":             task.ID().String(),
+		"title":          task.Title(),
+		"scheduled_date": task.ScheduledDate(),
+		"scheduled_time": task.ScheduledTime(),
+		"time_block":     task.TimeBlock(),
+	}}
+}
+
+func (s *Server) handleCreateMeeting(ctx context.Context, req *Request) *Response {
+	var payload CreateMeetingPayload
+	if err := s.decodePayload(req.Payload, &payload); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	scheduledDate, err := time.Parse("2006-01-02", payload.Date)
+	if err != nil {
+		return &Response{Success: false, Error: "invalid date format, use YYYY-MM-DD"}
+	}
+
+	board, err := s.container.BoardRepo.FindByID(ctx, payload.BoardID)
+	if err != nil {
+		return &Response{Success: false, Error: "board not found"}
+	}
+
+	taskSlug := slug.Generate(payload.Title)
+	taskID, err := board.GenerateNextTaskID(taskSlug)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	task, err := entity.NewTask(
+		taskID,
+		payload.Title,
+		"",
+		valueobject.PriorityMedium,
+		valueobject.StatusTodo,
+	)
+	if err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	task.SetTaskType(entity.TaskTypeMeeting)
+	task.SetScheduledDate(scheduledDate)
+
+	if payload.Time != nil {
+		scheduledTime, err := time.Parse("15:04", *payload.Time)
+		if err != nil {
+			return &Response{Success: false, Error: "invalid time format, use HH:MM"}
+		}
+		fullTime := time.Date(
+			scheduledDate.Year(), scheduledDate.Month(), scheduledDate.Day(),
+			scheduledTime.Hour(), scheduledTime.Minute(), 0, 0,
+			scheduledDate.Location(),
+		)
+		task.SetScheduledTime(fullTime)
+	}
+
+	if payload.Duration != nil {
+		duration, err := time.ParseDuration(*payload.Duration)
+		if err != nil {
+			return &Response{Success: false, Error: "invalid duration format, use e.g., 2h, 30m"}
+		}
+		task.SetTimeBlock(duration)
+	}
+
+	meetingData := &entity.MeetingData{}
+	if len(payload.Attendees) > 0 {
+		meetingData.Attendees = payload.Attendees
+	}
+	if payload.Location != nil {
+		meetingData.Location = *payload.Location
+	}
+	task.SetMeetingData(meetingData)
+
+	columns := board.Columns()
+	if len(columns) == 0 {
+		return &Response{Success: false, Error: "board has no columns"}
+	}
+
+	targetColumn := columns[0]
+	for _, col := range columns {
+		name := col.Name()
+		if name == "Meetings" || name == "Calendar" {
+			targetColumn = col
+			break
+		}
+	}
+
+	if err := targetColumn.AddTask(task); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	if err := s.container.BoardRepo.Save(ctx, board); err != nil {
+		return &Response{Success: false, Error: err.Error()}
+	}
+
+	s.notifySubscribers(board.ID(), &Notification{
+		Type:    NotificationTaskCreated,
+		BoardID: board.ID(),
+		Data:    task,
+	})
+
+	return &Response{Success: true, Data: map[string]interface{}{
+		"id":             task.ID().String(),
+		"title":          task.Title(),
+		"task_type":      task.TaskType(),
+		"scheduled_date": task.ScheduledDate(),
+		"scheduled_time": task.ScheduledTime(),
+		"time_block":     task.TimeBlock(),
+	}}
+}
+
+func (s *Server) findTaskAcrossBoards(ctx context.Context, taskID *valueobject.TaskID) (*entity.Board, *entity.Task, string, error) {
+	boards, err := s.container.ListBoardsUseCase.Execute(ctx)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	for _, boardInfo := range boards {
+		board, err := s.container.BoardRepo.FindByID(ctx, boardInfo.ID)
+		if err != nil {
+			continue
+		}
+		task, column, err := board.FindTask(taskID)
+		if err == nil {
+			return board, task, column.Name(), nil
+		}
+	}
+
+	return nil, nil, "", fmt.Errorf("task not found: %s", taskID.String())
+}
+
+func (s *Server) findTaskByShortID(ctx context.Context, shortID string) (*entity.Board, *entity.Task, string, error) {
+	fmt.Printf("[findTaskByShortID] Looking for: %s\n", shortID)
+	shortIDRegex := regexp.MustCompile(`^([A-Z]{3})-(\d+)$`)
+	matches := shortIDRegex.FindStringSubmatch(strings.TrimSpace(shortID))
+	if matches == nil {
+		return nil, nil, "", fmt.Errorf("invalid short ID format: %s", shortID)
+	}
+
+	prefix := matches[1]
+	number, _ := strconv.Atoi(matches[2])
+	fmt.Printf("[findTaskByShortID] Prefix: %s, Number: %d\n", prefix, number)
+
+	fmt.Println("[findTaskByShortID] Listing boards...")
+	boards, err := s.container.ListBoardsUseCase.Execute(ctx)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	fmt.Printf("[findTaskByShortID] Found %d boards\n", len(boards))
+
+	activeSession := s.sessionManager.GetActiveSession()
+	var activeBoardID string
+	if activeSession != nil {
+		activeBoardID = slug.Generate(activeSession.Name())
+		fmt.Printf("[findTaskByShortID] Active session board: %s\n", activeBoardID)
+	}
+
+	searchBoard := func(boardID string) (*entity.Board, *entity.Task, string, error) {
+		board, err := s.container.BoardRepo.FindByID(ctx, boardID)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		for _, col := range board.Columns() {
+			for _, task := range col.Tasks() {
+				if task.ID().Prefix() == prefix && task.ID().Number() == number {
+					return board, task, col.Name(), nil
+				}
+			}
+		}
+		return nil, nil, "", nil
+	}
+
+	if activeBoardID != "" {
+		fmt.Printf("[findTaskByShortID] Searching active board first: %s\n", activeBoardID)
+		board, task, colName, err := searchBoard(activeBoardID)
+		if err == nil && task != nil {
+			fmt.Println("[findTaskByShortID] Found task in active board!")
+			return board, task, colName, nil
+		}
+	}
+
+	for _, boardInfo := range boards {
+		if boardInfo.ID == activeBoardID {
+			continue
+		}
+		fmt.Printf("[findTaskByShortID] Checking board: %s\n", boardInfo.ID)
+		board, task, colName, err := searchBoard(boardInfo.ID)
+		if err == nil && task != nil {
+			fmt.Println("[findTaskByShortID] Found task!")
+			return board, task, colName, nil
+		}
+	}
+
+	return nil, nil, "", fmt.Errorf("task not found: %s", shortID)
 }

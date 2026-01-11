@@ -8,6 +8,7 @@ import (
 // Board is the aggregate root for the kanban board domain
 type Board struct {
 	id          string
+	projectID   string
 	name        string
 	prefix      string
 	description string
@@ -44,6 +45,17 @@ func NewBoard(id string, name string, description string) (*Board, error) {
 // ID returns the board ID
 func (b *Board) ID() string {
 	return b.id
+}
+
+// ProjectID returns the project ID this board belongs to
+func (b *Board) ProjectID() string {
+	return b.projectID
+}
+
+// SetProjectID sets the project ID for this board
+func (b *Board) SetProjectID(projectID string) {
+	b.projectID = projectID
+	b.modifiedAt = time.Now()
 }
 
 // Name returns the board name

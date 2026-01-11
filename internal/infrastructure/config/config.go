@@ -17,12 +17,14 @@ const (
 
 // Config holds application configuration
 type Config struct {
-	Storage        StorageConfig        `yaml:"storage"`
-	Daemon         DaemonConfig         `yaml:"daemon"`
-	TUI            TUIConfig            `yaml:"tui"`
-	Keybindings    KeybindingsConfig    `yaml:"keybindings"`
+	Storage         StorageConfig         `yaml:"storage"`
+	Daemon          DaemonConfig          `yaml:"daemon"`
+	TUI             TUIConfig             `yaml:"tui"`
+	Keybindings     KeybindingsConfig     `yaml:"keybindings"`
 	SessionTracking SessionTrackingConfig `yaml:"session_tracking"`
-	Actions        ActionsConfig        `yaml:"actions"`
+	Actions         ActionsConfig         `yaml:"actions"`
+	TimeTracking    TimeTrackingConfig    `yaml:"time_tracking"`
+	Calendar        CalendarConfig        `yaml:"calendar"`
 }
 
 // StorageConfig holds storage-related configuration
@@ -197,6 +199,48 @@ type ConditionConfig struct {
 	Field    string      `yaml:"field"`
 	Operator string      `yaml:"operator"`
 	Value    interface{} `yaml:"value"`
+}
+
+// TimeTrackingConfig holds time tracking configuration
+type TimeTrackingConfig struct {
+	Enabled      bool                    `yaml:"enabled"`
+	AutoTrack    bool                    `yaml:"auto_track"`
+	Sources      TimeTrackingSourcesConfig `yaml:"sources"`
+	Git          TimeTrackingGitConfig   `yaml:"git"`
+	Tmux         TimeTrackingTmuxConfig  `yaml:"tmux"`
+	IdleThreshold int                    `yaml:"idle_threshold"`
+}
+
+// TimeTrackingSourcesConfig holds enabled time tracking sources
+type TimeTrackingSourcesConfig struct {
+	Manual bool `yaml:"manual"`
+	Git    bool `yaml:"git"`
+	Tmux   bool `yaml:"tmux"`
+}
+
+// TimeTrackingGitConfig holds git-specific time tracking config
+type TimeTrackingGitConfig struct {
+	WatchBranches bool   `yaml:"watch_branches"`
+	BranchPattern string `yaml:"branch_pattern"`
+}
+
+// TimeTrackingTmuxConfig holds tmux-specific time tracking config
+type TimeTrackingTmuxConfig struct {
+	TrackActiveOnly bool `yaml:"track_active_only"`
+}
+
+// CalendarConfig holds Google Calendar integration settings
+type CalendarConfig struct {
+	Enabled         bool              `yaml:"enabled"`
+	CredentialsPath string            `yaml:"credentials_path"`
+	TokenPath       string            `yaml:"token_path"`
+	CalendarID      string            `yaml:"calendar_id"`
+	SyncInterval    int               `yaml:"sync_interval"`
+	AutoSync        bool              `yaml:"auto_sync"`
+	PullEnabled     bool              `yaml:"pull_enabled"`
+	PushEnabled     bool              `yaml:"push_enabled"`
+	ConflictPolicy  string            `yaml:"conflict_policy"`
+	CallbackPort    int               `yaml:"callback_port"`
 }
 
 // Loader handles loading and saving configuration
@@ -385,7 +429,7 @@ func (l *Loader) createDefaultConfig() (*Config, error) {
 		},
 		Actions: ActionsConfig{
 			Enabled:              true,
-			CheckInterval:        60, // Check every minute
+			CheckInterval:        60,
 			NotificationsEnabled: true,
 			ScriptsEnabled:       true,
 			ScriptsDir:           filepath.Join(homeDir, ".config", "mkanban", "scripts"),
@@ -408,6 +452,35 @@ func (l *Loader) createDefaultConfig() (*Config, error) {
 					},
 				},
 			},
+		},
+		TimeTracking: TimeTrackingConfig{
+			Enabled:       true,
+			AutoTrack:     true,
+			IdleThreshold: 300,
+			Sources: TimeTrackingSourcesConfig{
+				Manual: true,
+				Git:    true,
+				Tmux:   true,
+			},
+			Git: TimeTrackingGitConfig{
+				WatchBranches: true,
+				BranchPattern: `^(feature|bugfix)/([A-Z]+-[0-9]+)`,
+			},
+			Tmux: TimeTrackingTmuxConfig{
+				TrackActiveOnly: true,
+			},
+		},
+		Calendar: CalendarConfig{
+			Enabled:         false,
+			CredentialsPath: filepath.Join(homeDir, ".config", "mkanban", "google_credentials.json"),
+			TokenPath:       filepath.Join(homeDir, ".config", "mkanban", "google_token.json"),
+			CalendarID:      "primary",
+			SyncInterval:    300,
+			AutoSync:        true,
+			PullEnabled:     true,
+			PushEnabled:     true,
+			ConflictPolicy:  "newer_wins",
+			CallbackPort:    8085,
 		},
 	}
 

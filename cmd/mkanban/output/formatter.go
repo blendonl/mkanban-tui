@@ -12,12 +12,11 @@ import (
 type Format string
 
 const (
-	// FormatText is the default text output format
 	FormatText Format = "text"
-	// FormatJSON is JSON output format
 	FormatJSON Format = "json"
-	// FormatYAML is YAML output format
 	FormatYAML Format = "yaml"
+	FormatFZF  Format = "fzf"
+	FormatPath Format = "path"
 )
 
 // Formatter handles output formatting for different formats
@@ -88,7 +87,11 @@ func ParseFormat(s string) (Format, error) {
 		return FormatJSON, nil
 	case "yaml", "yml":
 		return FormatYAML, nil
+	case "fzf":
+		return FormatFZF, nil
+	case "path":
+		return FormatPath, nil
 	default:
-		return FormatText, fmt.Errorf("invalid format '%s': must be one of: text, json, yaml", s)
+		return FormatText, fmt.Errorf("invalid format '%s': must be one of: text, json, yaml, fzf, path", s)
 	}
 }

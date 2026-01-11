@@ -10,6 +10,9 @@ type BoardRepository interface {
 	// Save persists a board to storage
 	Save(ctx context.Context, board *entity.Board) error
 
+	// SaveTask persists a single task without rewriting the entire board
+	SaveTask(ctx context.Context, boardID string, columnName string, task *entity.Task) error
+
 	// FindByID retrieves a board by its ID
 	FindByID(ctx context.Context, id string) (*entity.Board, error)
 

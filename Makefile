@@ -5,6 +5,8 @@
 # Build variables
 BINARY_TUI := mkanban
 BINARY_DAEMON := mkanbad
+BINARY_NOTES := mnotes
+BINARY_AGENDA := magenda
 PREFIX ?= /usr/local
 BINDIR := $(PREFIX)/bin
 SYSTEMD_USER_DIR := $(PREFIX)/lib/systemd/user
@@ -18,11 +20,15 @@ LDFLAGS := -s -w
 
 all: build ## Build both TUI client and daemon
 
-build: ## Build TUI client and daemon
+build: ## Build all binaries (TUI, daemon, notes, agenda)
 	@echo "Building TUI client..."
 	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY_TUI) ./cmd/mkanban
 	@echo "Building daemon..."
 	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY_DAEMON) ./cmd/mkanbad
+	@echo "Building notes CLI..."
+	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY_NOTES) ./cmd/mnotes
+	@echo "Building agenda CLI..."
+	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY_AGENDA) ./cmd/magenda
 	@echo "Build complete!"
 
 wire: ## Regenerate wire dependency injection
@@ -34,6 +40,8 @@ install: build ## Install binaries, systemd services, and completions
 	@echo "Installing binaries..."
 	install -Dm755 $(BINARY_TUI) $(DESTDIR)$(BINDIR)/$(BINARY_TUI)
 	install -Dm755 $(BINARY_DAEMON) $(DESTDIR)$(BINDIR)/$(BINARY_DAEMON)
+	install -Dm755 $(BINARY_NOTES) $(DESTDIR)$(BINDIR)/$(BINARY_NOTES)
+	install -Dm755 $(BINARY_AGENDA) $(DESTDIR)$(BINDIR)/$(BINARY_AGENDA)
 
 	@echo "Installing systemd service files..."
 	install -Dm644 systemd/mkanbad.service $(DESTDIR)$(SYSTEMD_USER_DIR)/mkanbad.service
@@ -56,6 +64,8 @@ uninstall: ## Uninstall binaries, services, and completions
 	@echo "Uninstalling..."
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_TUI)
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_DAEMON)
+	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_NOTES)
+	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_AGENDA)
 	rm -f $(DESTDIR)$(SYSTEMD_USER_DIR)/mkanbad.service
 	rm -f $(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/mkanbad@.service
 	rm -f $(DESTDIR)$(COMPLETIONS_DIR)/bash-completion/completions/$(BINARY_TUI)
@@ -66,7 +76,7 @@ uninstall: ## Uninstall binaries, services, and completions
 
 clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."
-	rm -f $(BINARY_TUI) $(BINARY_DAEMON)
+	rm -f $(BINARY_TUI) $(BINARY_DAEMON) $(BINARY_NOTES) $(BINARY_AGENDA)
 	rm -f *.bash *.zsh *.fish
 	@echo "Clean complete!"
 

@@ -60,7 +60,7 @@ func ColumnToDTO(column *entity.Column) ColumnDTO {
 
 // TaskToDTO converts a Task entity to TaskDTO
 func TaskToDTO(task *entity.Task) TaskDTO {
-	return TaskDTO{
+	dto := TaskDTO{
 		ID:            task.ID().String(),
 		ShortID:       task.ID().ShortID(),
 		Title:         task.Title(),
@@ -73,7 +73,12 @@ func TaskToDTO(task *entity.Task) TaskDTO {
 		DueDate:       task.DueDate(),
 		CompletedDate: task.CompletedDate(),
 		IsOverdue:     task.IsOverdue(),
+		ScheduledDate: task.ScheduledDate(),
+		ScheduledTime: task.ScheduledTime(),
+		TimeBlock:     task.TimeBlock(),
+		TaskType:      string(task.TaskType()),
 	}
+	return dto
 }
 
 // TaskToDTOWithPath converts a Task entity to TaskDTO with file path and column name

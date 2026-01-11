@@ -3,6 +3,12 @@ package entity
 import "errors"
 
 var (
+	// Project errors
+	ErrProjectNotFound      = errors.New("project not found")
+	ErrProjectAlreadyExists = errors.New("project already exists")
+	ErrInvalidProjectID     = errors.New("invalid project ID")
+	ErrEmptyProjectName     = errors.New("project name cannot be empty")
+
 	// Board errors
 	ErrBoardNotFound      = errors.New("board not found")
 	ErrBoardAlreadyExists = errors.New("board already exists")
@@ -30,13 +36,27 @@ var (
 	ErrInvalidSessionType = errors.New("invalid session type")
 	ErrEmptyWorkingDir    = errors.New("working directory cannot be empty")
 
+	// TimeLog errors
+	ErrTimeLogNotFound       = errors.New("time log not found")
+	ErrInvalidTimeLogID      = errors.New("invalid time log ID")
+	ErrEmptyProjectID        = errors.New("project ID cannot be empty")
+	ErrInvalidTimeLogSource  = errors.New("invalid time log source")
+	ErrTimeLogAlreadyStopped = errors.New("time log already stopped")
+	ErrInvalidEndTime        = errors.New("end time must be after start time")
+	ErrInvalidDuration       = errors.New("duration must be non-negative")
+
+	// Note errors
+	ErrNoteNotFound   = errors.New("note not found")
+	ErrInvalidNoteID  = errors.New("invalid note ID")
+	ErrEmptyNoteTitle = errors.New("note title cannot be empty")
+
 	// Validation errors
-	ErrInvalidPriority   = errors.New("invalid priority value")
-	ErrInvalidStatus     = errors.New("invalid status value")
-	ErrInvalidColor      = errors.New("invalid color format")
-	ErrInvalidDate       = errors.New("invalid date")
-	ErrRequiredField     = errors.New("required field is missing")
-	ErrDueDateInPast     = errors.New("due date cannot be in the past")
+	ErrInvalidPriority = errors.New("invalid priority value")
+	ErrInvalidStatus   = errors.New("invalid status value")
+	ErrInvalidColor    = errors.New("invalid color format")
+	ErrInvalidDate     = errors.New("invalid date")
+	ErrRequiredField   = errors.New("required field is missing")
+	ErrDueDateInPast   = errors.New("due date cannot be in the past")
 
 	// Action/Reminder errors
 	ErrActionNotFound              = errors.New("action not found")

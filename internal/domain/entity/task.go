@@ -5,9 +5,33 @@ import (
 	"time"
 )
 
+type TaskType string
+
+const (
+	TaskTypeRegular   TaskType = "regular"
+	TaskTypeMeeting   TaskType = "meeting"
+	TaskTypeMilestone TaskType = "milestone"
+)
+
+func (t TaskType) IsValid() bool {
+	switch t {
+	case TaskTypeRegular, TaskTypeMeeting, TaskTypeMilestone:
+		return true
+	}
+	return false
+}
+
+type MeetingData struct {
+	Attendees     []string
+	Location      string
+	MeetingURL    string
+	GoogleEventID string
+}
+
 // Task represents a work item within a column
 type Task struct {
 	id            *valueobject.TaskID
+	projectID     string
 	title         string
 	description   string
 	priority      valueobject.Priority
@@ -19,6 +43,18 @@ type Task struct {
 	modifiedAt    time.Time
 	dueDate       *time.Time
 	completedDate *time.Time
+
+	estimatedTime *time.Duration
+	trackedTime   time.Duration
+	linkedNotes   []string
+
+	scheduledDate *time.Time
+	scheduledTime *time.Time
+	timeBlock     *time.Duration
+	recurrence    *valueobject.RecurrenceRule
+
+	taskType    TaskType
+	meetingData *MeetingData
 }
 
 // NewTask creates a new Task entity
@@ -51,6 +87,8 @@ func NewTask(
 		status:      status,
 		tags:        make([]string, 0),
 		metadata:    make(map[string]string),
+		linkedNotes: make([]string, 0),
+		taskType:    TaskTypeRegular,
 		createdAt:   now,
 		modifiedAt:  now,
 	}, nil
@@ -280,4 +318,155 @@ func (t *Task) RemoveMetadata(key string) {
 	}
 	delete(t.metadata, key)
 	t.modifiedAt = time.Now()
+}
+
+func (t *Task) ProjectID() string {
+	return t.projectID
+}
+
+func (t *Task) SetProjectID(projectID string) {
+	t.projectID = projectID
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) EstimatedTime() *time.Duration {
+	return t.estimatedTime
+}
+
+func (t *Task) SetEstimatedTime(d time.Duration) {
+	t.estimatedTime = &d
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) TrackedTime() time.Duration {
+	return t.trackedTime
+}
+
+func (t *Task) SetTrackedTime(d time.Duration) {
+	t.trackedTime = d
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) AddTrackedTime(d time.Duration) {
+	t.trackedTime += d
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) LinkedNotes() []string {
+	notesCopy := make([]string, len(t.linkedNotes))
+	copy(notesCopy, t.linkedNotes)
+	return notesCopy
+}
+
+func (t *Task) AddLinkedNote(noteID string) {
+	for _, id := range t.linkedNotes {
+		if id == noteID {
+			return
+		}
+	}
+	t.linkedNotes = append(t.linkedNotes, noteID)
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) RemoveLinkedNote(noteID string) {
+	for i, id := range t.linkedNotes {
+		if id == noteID {
+			t.linkedNotes = append(t.linkedNotes[:i], t.linkedNotes[i+1:]...)
+			t.modifiedAt = time.Now()
+			return
+		}
+	}
+}
+
+func (t *Task) ScheduledDate() *time.Time {
+	if t.scheduledDate == nil {
+		return nil
+	}
+	copy := *t.scheduledDate
+	return &copy
+}
+
+func (t *Task) SetScheduledDate(date time.Time) {
+	t.scheduledDate = &date
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) ClearScheduledDate() {
+	t.scheduledDate = nil
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) ScheduledTime() *time.Time {
+	if t.scheduledTime == nil {
+		return nil
+	}
+	copy := *t.scheduledTime
+	return &copy
+}
+
+func (t *Task) SetScheduledTime(scheduledTime time.Time) {
+	t.scheduledTime = &scheduledTime
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) ClearScheduledTime() {
+	t.scheduledTime = nil
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) TimeBlock() *time.Duration {
+	return t.timeBlock
+}
+
+func (t *Task) SetTimeBlock(d time.Duration) {
+	t.timeBlock = &d
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) ClearTimeBlock() {
+	t.timeBlock = nil
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) Recurrence() *valueobject.RecurrenceRule {
+	return t.recurrence
+}
+
+func (t *Task) SetRecurrence(rule *valueobject.RecurrenceRule) {
+	t.recurrence = rule
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) ClearRecurrence() {
+	t.recurrence = nil
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) TaskType() TaskType {
+	if t.taskType == "" {
+		return TaskTypeRegular
+	}
+	return t.taskType
+}
+
+func (t *Task) SetTaskType(taskType TaskType) {
+	t.taskType = taskType
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) IsMeeting() bool {
+	return t.taskType == TaskTypeMeeting
+}
+
+func (t *Task) MeetingData() *MeetingData {
+	return t.meetingData
+}
+
+func (t *Task) SetMeetingData(data *MeetingData) {
+	t.meetingData = data
+	t.modifiedAt = time.Now()
+}
+
+func (t *Task) IsScheduled() bool {
+	return t.scheduledDate != nil || t.scheduledTime != nil
 }

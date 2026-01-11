@@ -27,8 +27,11 @@ type Container struct {
 	Config *config.Config
 
 	// Repositories
-	BoardRepo  repository.BoardRepository
-	ActionRepo repository.ActionRepository
+	BoardRepo   repository.BoardRepository
+	ActionRepo  repository.ActionRepository
+	ProjectRepo repository.ProjectRepository
+	TimeLogRepo repository.TimeLogRepository
+	NoteRepo    repository.NoteRepository
 
 	// Domain Services
 	ValidationService *service.ValidationService
@@ -89,6 +92,9 @@ func InitializeContainer() (*Container, error) {
 		// Repositories
 		ProvideBoardRepository,
 		ProvideActionRepository,
+		ProvideProjectRepository,
+		ProvideTimeLogRepository,
+		ProvideNoteRepository,
 
 		// Domain Services
 		ProvideValidationService,
@@ -229,4 +235,16 @@ func ProvideTaskMutator(
 	moveTaskUseCase *task.MoveTaskUseCase,
 ) entity.TaskMutator {
 	return infraService.NewTaskMutatorService(createTaskUseCase, updateTaskUseCase, moveTaskUseCase)
+}
+
+func ProvideProjectRepository(cfg *config.Config) repository.ProjectRepository {
+	return filesystem.NewProjectRepository(cfg.Storage.DataPath)
+}
+
+func ProvideTimeLogRepository(cfg *config.Config) repository.TimeLogRepository {
+	return filesystem.NewTimeLogRepository(cfg.Storage.DataPath)
+}
+
+func ProvideNoteRepository(cfg *config.Config) repository.NoteRepository {
+	return filesystem.NewNoteRepository(cfg.Storage.DataPath)
 }

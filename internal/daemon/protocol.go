@@ -25,9 +25,27 @@ const (
 	RequestDisableAction   = "disable_action"
 
 	// Real-time update request types
-	RequestSubscribe       = "subscribe"
-	RequestUnsubscribe     = "unsubscribe"
-	RequestPing            = "ping"
+	RequestSubscribe   = "subscribe"
+	RequestUnsubscribe = "unsubscribe"
+	RequestPing        = "ping"
+
+	// Time tracking request types
+	RequestStartTimer      = "start_timer"
+	RequestStopTimer       = "stop_timer"
+	RequestGetActiveTimers = "get_active_timers"
+	RequestListTimeLogs    = "list_time_logs"
+	RequestAddTimeEntry    = "add_time_entry"
+
+	// Project request types
+	RequestCreateProject = "create_project"
+	RequestGetProject    = "get_project"
+	RequestListProjects  = "list_projects"
+	RequestUpdateProject = "update_project"
+	RequestDeleteProject = "delete_project"
+
+	// Agenda request types
+	RequestScheduleTask  = "schedule_task"
+	RequestCreateMeeting = "create_meeting"
 )
 
 // Request represents a client request to the daemon
@@ -152,11 +170,89 @@ type UnsubscribePayload struct {
 	BoardID string `json:"board_id"`
 }
 
+// GetActiveBoardPayload contains data for getting the active board
+type GetActiveBoardPayload struct {
+	SessionName string `json:"session_name,omitempty"`
+}
+
 // Notification represents a push notification from daemon to client
 type Notification struct {
 	Type    string      `json:"type"`
 	BoardID string      `json:"board_id,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
+}
+
+// Time tracking payloads
+
+type StartTimerPayload struct {
+	ProjectID   string  `json:"project_id"`
+	TaskID      *string `json:"task_id,omitempty"`
+	Description string  `json:"description,omitempty"`
+}
+
+type StopTimerPayload struct {
+	ProjectID string  `json:"project_id"`
+	TaskID    *string `json:"task_id,omitempty"`
+}
+
+type ListTimeLogsPayload struct {
+	ProjectID string  `json:"project_id,omitempty"`
+	TaskID    *string `json:"task_id,omitempty"`
+	StartDate *string `json:"start_date,omitempty"`
+	EndDate   *string `json:"end_date,omitempty"`
+}
+
+type AddTimeEntryPayload struct {
+	ProjectID   string `json:"project_id"`
+	TaskID      *string `json:"task_id,omitempty"`
+	StartTime   string `json:"start_time"`
+	Duration    int64  `json:"duration_seconds"`
+	Description string `json:"description,omitempty"`
+}
+
+// Project payloads
+
+type CreateProjectPayload struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	WorkingDir  string `json:"working_dir,omitempty"`
+	Color       string `json:"color,omitempty"`
+}
+
+type GetProjectPayload struct {
+	ProjectID string `json:"project_id"`
+}
+
+type UpdateProjectPayload struct {
+	ProjectID   string  `json:"project_id"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	WorkingDir  *string `json:"working_dir,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Archived    *bool   `json:"archived,omitempty"`
+}
+
+type DeleteProjectPayload struct {
+	ProjectID string `json:"project_id"`
+}
+
+// Agenda payloads
+
+type ScheduleTaskPayload struct {
+	TaskID   string  `json:"task_id"`
+	Date     string  `json:"date"`
+	Time     *string `json:"time,omitempty"`
+	Duration *string `json:"duration,omitempty"`
+}
+
+type CreateMeetingPayload struct {
+	BoardID   string   `json:"board_id"`
+	Title     string   `json:"title"`
+	Date      string   `json:"date"`
+	Time      *string  `json:"time,omitempty"`
+	Duration  *string  `json:"duration,omitempty"`
+	Attendees []string `json:"attendees,omitempty"`
+	Location  *string  `json:"location,omitempty"`
 }
 
 // Notification types

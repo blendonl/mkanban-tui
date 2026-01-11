@@ -549,6 +549,11 @@ func (r *BoardRepositoryImpl) loadColumnLegacy(boardID, columnFolderName string)
 	return nil, fmt.Errorf("failed to load column metadata: metadata.yml error: %v, column.md error: %v", metadataErr, contentErr)
 }
 
+// SaveTask persists a single task without rewriting the entire board
+func (r *BoardRepositoryImpl) SaveTask(ctx context.Context, boardID string, columnName string, task *entity.Task) error {
+	return r.saveTask(boardID, columnName, task)
+}
+
 // saveTask saves a task to filesystem
 func (r *BoardRepositoryImpl) saveTask(boardID, columnName string, task *entity.Task) error {
 	// Task folder name is the full task ID

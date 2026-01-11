@@ -62,6 +62,9 @@ func (sm *SessionManager) Start(ctx context.Context) error {
 
 	fmt.Printf("[SessionManager] Starting session tracking (poll interval: %ds)\n", sm.config.SessionTracking.PollInterval)
 
+	// Run initial sync synchronously before accepting connections
+	sm.syncSessions(ctx)
+
 	// Start polling loop in background
 	go sm.pollLoop(ctx)
 
@@ -99,9 +102,6 @@ func (sm *SessionManager) GetActiveSession() *entity.Session {
 
 // pollLoop runs the periodic session tracking
 func (sm *SessionManager) pollLoop(ctx context.Context) {
-	// Run initial sync
-	sm.syncSessions(ctx)
-
 	// Create ticker for polling
 	pollInterval := time.Duration(sm.config.SessionTracking.PollInterval) * time.Second
 	ticker := time.NewTicker(pollInterval)

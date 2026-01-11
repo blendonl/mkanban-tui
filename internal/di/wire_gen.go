@@ -32,6 +32,9 @@ func InitializeContainer() (*Container, error) {
 	}
 	boardRepository := ProvideBoardRepository(config)
 	actionRepository := ProvideActionRepository(config)
+	projectRepository := ProvideProjectRepository(config)
+	timeLogRepository := ProvideTimeLogRepository(config)
+	noteRepository := ProvideNoteRepository(config)
 	validationService := ProvideValidationService(boardRepository)
 	boardService := ProvideBoardService(boardRepository, validationService, config)
 	sessionTracker := ProvideSessionTracker()
@@ -53,7 +56,7 @@ func InitializeContainer() (*Container, error) {
 	checkoutTaskUseCase := task.NewCheckoutTaskUseCase(boardRepository, vcsProvider, repoPathResolver)
 	syncSessionBoardUseCase := session.NewSyncSessionBoardUseCase(boardRepository, boardService, validationService, v)
 	trackSessionsUseCase := session.NewTrackSessionsUseCase(sessionTracker, syncSessionBoardUseCase)
-	getActiveSessionBoardUseCase := session.NewGetActiveSessionBoardUseCase(sessionTracker, boardRepository, v)
+	getActiveSessionBoardUseCase := session.NewGetActiveSessionBoardUseCase(sessionTracker, boardRepository, v, syncSessionBoardUseCase)
 	createActionUseCase := action.NewCreateActionUseCase(actionRepository)
 	updateActionUseCase := action.NewUpdateActionUseCase(actionRepository)
 	deleteActionUseCase := action.NewDeleteActionUseCase(actionRepository)
@@ -72,6 +75,9 @@ func InitializeContainer() (*Container, error) {
 		Config:                       config,
 		BoardRepo:                    boardRepository,
 		ActionRepo:                   actionRepository,
+		ProjectRepo:                  projectRepository,
+		TimeLogRepo:                  timeLogRepository,
+		NoteRepo:                     noteRepository,
 		ValidationService:            validationService,
 		BoardService:                 boardService,
 		SessionTracker:               sessionTracker,
@@ -117,8 +123,11 @@ type Container struct {
 	Config *config.Config
 
 	// Repositories
-	BoardRepo  repository.BoardRepository
-	ActionRepo repository.ActionRepository
+	BoardRepo   repository.BoardRepository
+	ActionRepo  repository.ActionRepository
+	ProjectRepo repository.ProjectRepository
+	TimeLogRepo repository.TimeLogRepository
+	NoteRepo    repository.NoteRepository
 
 	// Domain Services
 	ValidationService *service.ValidationService
@@ -250,4 +259,16 @@ func ProvideTaskMutator(
 	moveTaskUseCase *task.MoveTaskUseCase,
 ) entity.TaskMutator {
 	return service2.NewTaskMutatorService(createTaskUseCase, updateTaskUseCase, moveTaskUseCase)
+}
+
+func ProvideProjectRepository(cfg *config.Config) repository.ProjectRepository {
+	return filesystem.NewProjectRepository(cfg.Storage.DataPath)
+}
+
+func ProvideTimeLogRepository(cfg *config.Config) repository.TimeLogRepository {
+	return filesystem.NewTimeLogRepository(cfg.Storage.DataPath)
+}
+
+func ProvideNoteRepository(cfg *config.Config) repository.NoteRepository {
+	return filesystem.NewNoteRepository(cfg.Storage.DataPath)
 }
