@@ -12,8 +12,8 @@ optdepends=(
     'git: for git workflow integration'
     'tmux: for tmux session integration'
 )
-provides=('mkanban' 'mkanbad')
-conflicts=('mkanban' 'mkanbad')
+provides=('mkanban' 'mkanbad' 'mnotes' 'magenda')
+conflicts=('mkanban' 'mkanbad' 'mnotes' 'magenda')
 backup=('etc/mkanban/config.yaml')
 
 # For release builds from GitHub tag:
@@ -41,10 +41,22 @@ build() {
     # Build daemon
     go build -o mkanbad ./cmd/mkanbad
 
+    # Build notes CLI
+    go build -o mnotes ./cmd/mnotes
+
+    # Build agenda CLI
+    go build -o magenda ./cmd/magenda
+
     # Generate shell completions
     ./mkanban completion bash > mkanban.bash
     ./mkanban completion zsh > mkanban.zsh
     ./mkanban completion fish > mkanban.fish
+    ./mnotes completion bash > mnotes.bash
+    ./mnotes completion zsh > mnotes.zsh
+    ./mnotes completion fish > mnotes.fish
+    ./magenda completion bash > magenda.bash
+    ./magenda completion zsh > magenda.zsh
+    ./magenda completion fish > magenda.fish
 }
 
 check() {
@@ -60,6 +72,8 @@ package() {
     # Install binaries
     install -Dm755 mkanban "${pkgdir}/usr/bin/mkanban"
     install -Dm755 mkanbad "${pkgdir}/usr/bin/mkanbad"
+    install -Dm755 mnotes "${pkgdir}/usr/bin/mnotes"
+    install -Dm755 magenda "${pkgdir}/usr/bin/magenda"
 
     # Install systemd service files
     install -Dm644 systemd/mkanbad.service "${pkgdir}/usr/lib/systemd/user/mkanbad.service"
