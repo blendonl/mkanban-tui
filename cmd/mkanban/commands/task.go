@@ -1121,7 +1121,7 @@ func openEditorForEmptyTask(priority string, tags []string) (string, error) {
 		"tags":     tags,
 	}
 
-	content := "# \n"
+	content := "# "
 	data, err := serialization.SerializeFrontmatter(frontmatter, content)
 	if err != nil {
 		return "", err
@@ -1136,7 +1136,8 @@ func openEditorForEmptyTask(priority string, tags []string) (string, error) {
 		editor = "vi"
 	}
 
-	cmd := exec.Command(editor, tmpPath)
+	titleLine := findFirstHeadingLine(string(data))
+	cmd := buildEditorCommand(editor, tmpPath, titleLine)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -1151,6 +1152,40 @@ func openEditorForEmptyTask(priority string, tags []string) (string, error) {
 	}
 
 	return string(edited), nil
+}
+
+func buildEditorCommand(editor, path string, line int) *exec.Cmd {
+	parts := strings.Fields(editor)
+	if len(parts) == 0 {
+		return exec.Command("vi", path)
+	}
+
+	editorName := filepath.Base(parts[0])
+	if line > 0 && isViStyleEditor(editorName) {
+		parts = append(parts, fmt.Sprintf("+%d", line))
+	}
+	parts = append(parts, path)
+
+	return exec.Command(parts[0], parts[1:]...)
+}
+
+func isViStyleEditor(editor string) bool {
+	switch editor {
+	case "vi", "vim", "nvim":
+		return true
+	default:
+		return false
+	}
+}
+
+func findFirstHeadingLine(content string) int {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			return i + 1
+		}
+	}
+	return 0
 }
 
 func parseTagsString(tagsStr string) []string {
