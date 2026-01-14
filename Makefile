@@ -16,6 +16,7 @@ DOCS_DIR := $(PREFIX)/share/doc/mkanban-tui
 PKGDEST ?= $(CURDIR)/.artifacts/pkg
 SRCDEST ?= $(CURDIR)/.artifacts/src
 BUILDDIR ?= $(CURDIR)/.artifacts/build
+MKANBAN_USE_LOCAL ?= 1
 
 # Go build flags
 GOFLAGS := -trimpath
@@ -113,12 +114,12 @@ lint: fmt vet ## Run formatters and linters
 
 arch-pkg: ## Build Arch Linux package
 	@echo "Building Arch Linux package..."
-	PKGDEST=$(PKGDEST) SRCDEST=$(SRCDEST) BUILDDIR=$(BUILDDIR) makepkg -sf
+	PKGDEST=$(PKGDEST) SRCDEST=$(SRCDEST) BUILDDIR=$(BUILDDIR) MKANBAN_USE_LOCAL=$(MKANBAN_USE_LOCAL) makepkg -sf
 	@echo "Package build complete!"
 
 arch-install: arch-pkg ## Build and install Arch Linux package
 	@echo "Installing Arch Linux package..."
-	PKGDEST=$(PKGDEST) SRCDEST=$(SRCDEST) BUILDDIR=$(BUILDDIR) makepkg -sfi
+	PKGDEST=$(PKGDEST) SRCDEST=$(SRCDEST) BUILDDIR=$(BUILDDIR) MKANBAN_USE_LOCAL=$(MKANBAN_USE_LOCAL) makepkg -sfi
 	@echo "Package installed!"
 
 systemd-user-enable: ## Enable user systemd service

@@ -16,11 +16,14 @@ provides=('mkanban' 'mkanbad' 'mnotes' 'magenda')
 conflicts=('mkanban' 'mkanbad' 'mnotes' 'magenda')
 backup=('etc/mkanban/config.yaml')
 
-# For release builds from GitHub tag:
-# source=("git+${url}.git#tag=v${pkgver}")
-# For local builds from current directory:
-source=("${pkgname}::git+file://${PWD}")
-sha256sums=('SKIP')
+if [[ -n "${MKANBAN_USE_LOCAL}" ]]; then
+    source=("${pkgname}::file://${PWD}")
+    sha256sums=('SKIP')
+else
+    # For release builds from GitHub tag:
+    source=("git+${url}.git#tag=v${pkgver}")
+    sha256sums=('SKIP')
+fi
 
 build() {
     cd "${srcdir}/${pkgname}"
