@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"mkanban/internal/application/dto"
+	"mkanban/internal/infrastructure/serialization"
 )
 
 // taskCmd represents the task command
@@ -374,13 +376,37 @@ Examples:
 		dueStr, _ := cmd.Flags().GetString("due")
 		useEditor, _ := cmd.Flags().GetBool("edit")
 
-		// Validate title
-		if title == "" {
-			return fmt.Errorf("--title is required")
-		}
+		var tags []string
 
-		// If --edit flag is set, open editor for description
-		if useEditor {
+		if title == "" {
+			parsedTags := parseTagsString(tagsStr)
+			editedContent, err := openEditorForEmptyTask(priority, parsedTags)
+			if err != nil {
+				return fmt.Errorf("failed to open editor: %w", err)
+			}
+
+			doc, err := serialization.ParseFrontmatter([]byte(editedContent))
+			if err != nil {
+				return fmt.Errorf("failed to parse task frontmatter: %w", err)
+			}
+
+			parsedTitle, parsedDesc, err := parseMarkdownTask(doc.Content)
+			if err != nil {
+				return fmt.Errorf("failed to parse task: %w", err)
+			}
+			title = parsedTitle
+			description = parsedDesc
+
+			if priority == "" {
+				priority = doc.GetString("priority")
+			}
+
+			if tagsStr == "" {
+				tags = doc.GetStringSlice("tags")
+			} else {
+				tags = parsedTags
+			}
+		} else if useEditor {
 			editedContent, err := openEditorForTask(title, description)
 			if err != nil {
 				return fmt.Errorf("failed to open editor: %w", err)
@@ -420,12 +446,8 @@ Examples:
 		}
 
 		// Parse tags
-		var tags []string
-		if tagsStr != "" {
-			tags = strings.Split(tagsStr, ",")
-			for i, tag := range tags {
-				tags[i] = strings.TrimSpace(tag)
-			}
+		if title != "" && tags == nil {
+			tags = parseTagsString(tagsStr)
 		}
 
 		// Parse due date
@@ -1078,6 +1100,79 @@ func openEditorForTask(title, description string) (string, error) {
 	return string(edited), nil
 }
 
+func openEditorForEmptyTask(priority string, tags []string) (string, error) {
+	tmpDir := filepath.Join(os.TempDir(), "mkanban")
+	tmpPath := filepath.Join(tmpDir, "task")
+
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return "", err
+	}
+
+	if priority == "" {
+		priority = "none"
+	}
+
+	if tags == nil {
+		tags = []string{}
+	}
+
+	frontmatter := map[string]interface{}{
+		"priority": priority,
+		"tags":     tags,
+	}
+
+	content := "# \n"
+	data, err := serialization.SerializeFrontmatter(frontmatter, content)
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return "", err
+	}
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	cmd := exec.Command(editor, tmpPath)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	edited, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return "", err
+	}
+
+	return string(edited), nil
+}
+
+func parseTagsString(tagsStr string) []string {
+	if tagsStr == "" {
+		return nil
+	}
+
+	tags := strings.Split(tagsStr, ",")
+	for i, tag := range tags {
+		tags[i] = strings.TrimSpace(tag)
+	}
+
+	filtered := tags[:0]
+	for _, tag := range tags {
+		if tag != "" {
+			filtered = append(filtered, tag)
+		}
+	}
+
+	return filtered
+}
+
 // parseMarkdownTask extracts title and description from markdown content
 func parseMarkdownTask(content string) (string, string, error) {
 	lines := strings.Split(content, "\n")
@@ -1159,7 +1254,7 @@ func init() {
 	taskListCmd.Flags().String("due-before", "", "Show tasks due before date (YYYY-MM-DD)")
 
 	// taskCreateCmd flags
-	taskCreateCmd.Flags().String("title", "", "Task title (required)")
+	taskCreateCmd.Flags().String("title", "", "Task title (optional; opens editor if omitted)")
 	taskCreateCmd.Flags().String("description", "", "Task description")
 	taskCreateCmd.Flags().String("column", "", "Column name (default: Todo)")
 	taskCreateCmd.Flags().String("priority", "", "Priority: low, medium, high, critical")
@@ -1167,7 +1262,6 @@ func init() {
 	taskCreateCmd.Flags().String("tags", "", "Comma-separated tags")
 	taskCreateCmd.Flags().String("due", "", "Due date (YYYY-MM-DD)")
 	taskCreateCmd.Flags().Bool("edit", false, "Open editor for description")
-	taskCreateCmd.MarkFlagRequired("title")
 
 	// taskUpdateCmd flags
 	taskUpdateCmd.Flags().String("title", "", "New title")

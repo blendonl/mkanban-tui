@@ -13,6 +13,9 @@ SYSTEMD_USER_DIR := $(PREFIX)/lib/systemd/user
 SYSTEMD_SYSTEM_DIR := $(PREFIX)/lib/systemd/system
 COMPLETIONS_DIR := $(PREFIX)/share
 DOCS_DIR := $(PREFIX)/share/doc/mkanban-tui
+PKGDEST ?= $(CURDIR)/.artifacts/pkg
+SRCDEST ?= $(CURDIR)/.artifacts/src
+BUILDDIR ?= $(CURDIR)/.artifacts/build
 
 # Go build flags
 GOFLAGS := -trimpath
@@ -110,12 +113,12 @@ lint: fmt vet ## Run formatters and linters
 
 arch-pkg: ## Build Arch Linux package
 	@echo "Building Arch Linux package..."
-	makepkg -sf
+	PKGDEST=$(PKGDEST) SRCDEST=$(SRCDEST) BUILDDIR=$(BUILDDIR) makepkg -sf
 	@echo "Package build complete!"
 
 arch-install: arch-pkg ## Build and install Arch Linux package
 	@echo "Installing Arch Linux package..."
-	makepkg -sfi
+	PKGDEST=$(PKGDEST) SRCDEST=$(SRCDEST) BUILDDIR=$(BUILDDIR) makepkg -sfi
 	@echo "Package installed!"
 
 systemd-user-enable: ## Enable user systemd service

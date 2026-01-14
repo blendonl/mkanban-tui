@@ -4,4 +4,11 @@
 *.dylib
 mkanban
 mkanbad
+magenda
+mnotes
 bin
+
+pkg/mkanban-tui
+pkg/mkanban-tui-debug
+
+.artifacts
