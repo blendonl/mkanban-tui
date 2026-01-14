@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -48,9 +49,13 @@ PowerShell:
 `,
 	DisableFlagsInUseLine: true,
 	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
-	Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
-	Run: func(cmd *cobra.Command, args []string) {
-		switch args[0] {
+	Args:                  cobra.RangeArgs(0, 1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		switch resolvedArgs[0] {
 		case "bash":
 			cmd.Root().GenBashCompletion(os.Stdout)
 		case "zsh":
@@ -59,7 +64,10 @@ PowerShell:
 			cmd.Root().GenFishCompletion(os.Stdout, true)
 		case "powershell":
 			cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
+		default:
+			return fmt.Errorf("invalid shell: %s", resolvedArgs[0])
 		}
+		return nil
 	},
 }
 

@@ -257,10 +257,14 @@ Examples:
 
   # Get task in markdown format
   mkanban task get TASK-123 --output markdown`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -521,10 +525,14 @@ Examples:
 
   # Edit description in editor
   mkanban task update TASK-123 --edit`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -544,9 +552,9 @@ Examples:
 
 		// Check if any flags were provided
 		if !cmd.Flags().Changed("title") && !cmd.Flags().Changed("description") &&
-		   !cmd.Flags().Changed("priority") && !cmd.Flags().Changed("status") &&
-		   !cmd.Flags().Changed("tags") && len(addTags) == 0 && len(removeTags) == 0 &&
-		   !cmd.Flags().Changed("due") && !useEditor {
+			!cmd.Flags().Changed("priority") && !cmd.Flags().Changed("status") &&
+			!cmd.Flags().Changed("tags") && len(addTags) == 0 && len(removeTags) == 0 &&
+			!cmd.Flags().Changed("due") && !useEditor {
 			return fmt.Errorf("no updates specified")
 		}
 
@@ -599,11 +607,15 @@ Examples:
 
   # Move task to "Done"
   mkanban task move TASK-123 Done`,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.RangeArgs(0, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
-		targetColumn := args[1]
+		resolvedArgs, err := resolveArgs(args, 2)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
+		targetColumn := resolvedArgs[1]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -637,10 +649,14 @@ This is the CLI equivalent of the TUI 'm' or Enter key action.
 Examples:
   # Move task to next column
   mkanban task advance TASK-123`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -711,10 +727,14 @@ var taskRetreatCmd = &cobra.Command{
 Examples:
   # Move task to previous column
   mkanban task retreat TASK-123`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -792,10 +812,14 @@ Examples:
 
   # Delete without confirmation
   mkanban task delete TASK-123 --force`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -868,10 +892,14 @@ Examples:
 
   # Create new branch if it doesn't exist
   mkanban task checkout TASK-123 --create`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -978,10 +1006,14 @@ Examples:
 
   # Show task with more context
   mkanban task show TASK-123 --context 5`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {

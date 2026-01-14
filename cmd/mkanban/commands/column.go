@@ -115,10 +115,14 @@ Examples:
 
   # Get column in JSON format
   mkanban column get "Todo" --output json`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		columnName := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		columnName := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -184,10 +188,14 @@ Examples:
 
   # Create a column with description
   mkanban column create "Done" --description "Completed tasks"`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		columnName := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		columnName := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -257,10 +265,14 @@ Examples:
 
   # Update description
   mkanban column update "Done" --description "Completed and deployed"`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		columnName := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		columnName := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -275,7 +287,7 @@ Examples:
 
 		// Check if any flags were provided
 		if !cmd.Flags().Changed("name") && !cmd.Flags().Changed("description") &&
-		   !cmd.Flags().Changed("position") && !cmd.Flags().Changed("wip-limit") {
+			!cmd.Flags().Changed("position") && !cmd.Flags().Changed("wip-limit") {
 			return fmt.Errorf("no updates specified. Use --name, --description, --position, or --wip-limit")
 		}
 
@@ -317,10 +329,14 @@ Examples:
 
   # Force delete column with tasks (tasks will be deleted)
   mkanban column delete "Archived" --force`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		columnName := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		columnName := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {
@@ -380,10 +396,14 @@ Examples:
 
   # Reorder with spaces in column names
   mkanban column reorder "To Do,In Progress,Code Review,Done"`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		columnsStr := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		columnsStr := resolvedArgs[0]
 
 		boardID, err := getBoardID(ctx)
 		if err != nil {

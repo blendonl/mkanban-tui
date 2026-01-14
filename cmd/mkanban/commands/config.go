@@ -75,9 +75,13 @@ Examples:
 
   # Get theme color
   mkanban config get tui.theme.primary_color`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		key := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		key := resolvedArgs[0]
 
 		// TODO: Implement config key lookup
 		printer.Error("Config get not yet implemented")
@@ -107,10 +111,14 @@ Examples:
 
   # Enable session tracking
   mkanban config set session.enabled true`,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.RangeArgs(0, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		key := args[0]
-		value := args[1]
+		resolvedArgs, err := resolveArgs(args, 2)
+		if err != nil {
+			return err
+		}
+		key := resolvedArgs[0]
+		value := resolvedArgs[1]
 
 		// TODO: Implement config update
 		printer.Error("Config set not yet implemented")

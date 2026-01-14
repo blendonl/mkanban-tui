@@ -116,10 +116,14 @@ Examples:
 
   # Get board in JSON format
   mkanban board get my-project --output json`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		boardID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		boardID := resolvedArgs[0]
 
 		board, err := container.GetBoardUseCase.Execute(ctx, boardID)
 		if err != nil {
@@ -189,10 +193,14 @@ Examples:
   mkanban board create my-project \
     --name "My Project" \
     --repo-path "/path/to/repo"`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		boardID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		boardID := resolvedArgs[0]
 
 		// Get flags
 		name, _ := cmd.Flags().GetString("name")
@@ -268,10 +276,14 @@ Examples:
 
   # Delete a board without confirmation
   mkanban board delete my-project --force`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		boardID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		boardID := resolvedArgs[0]
 
 		force, _ := cmd.Flags().GetBool("force")
 
@@ -362,10 +374,14 @@ This sets the default board for subsequent commands in the current tmux session.
 Examples:
   # Switch to a different board
   mkanban board switch my-other-project`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-		boardID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		boardID := resolvedArgs[0]
 
 		// Verify board exists
 		board, err := container.GetBoardUseCase.Execute(ctx, boardID)
