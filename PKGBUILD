@@ -17,7 +17,8 @@ conflicts=('mkanban' 'mkanbad' 'mnotes' 'magenda')
 backup=('etc/mkanban/config.yaml')
 
 if [[ -n "${MKANBAN_USE_LOCAL}" ]]; then
-    source=("${pkgname}::file://${PWD}")
+    # Uses the local git repo state (committed changes only).
+    source=("${pkgname}::git+file://${PWD}")
     sha256sums=('SKIP')
 else
     # For release builds from GitHub tag:
