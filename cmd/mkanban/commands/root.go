@@ -1,9 +1,14 @@
 package commands
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"mkanban/cmd/mkanban/output"
@@ -19,10 +24,10 @@ var (
 	BuildDate = "unknown"
 
 	// Global flags
-	boardID    string
+	boardID      string
 	outputFormat string
-	configPath string
-	quiet      bool
+	configPath   string
+	quiet        bool
 
 	// Shared instances
 	cfg       *config.Config
@@ -30,6 +35,9 @@ var (
 	printer   *output.Printer
 	formatter *output.Formatter
 )
+
+var multiSpaceRE = regexp.MustCompile(`\s{2,}`)
+var taskIDLikeRE = regexp.MustCompile(`^[A-Za-z]+-\d+`)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -180,6 +188,107 @@ func getBoardID(ctx context.Context) (string, error) {
 	}
 
 	return boards[0].ID, nil
+}
+
+func resolveArgs(args []string, expected int) ([]string, error) {
+	if len(args) >= expected {
+		return args, nil
+	}
+
+	pipedArgs, err := readPipedArgs(expected)
+	if err != nil {
+		return nil, err
+	}
+
+	needed := expected - len(args)
+	available := len(args) + len(pipedArgs)
+	if len(pipedArgs) < needed {
+		return nil, fmt.Errorf("accepts %d arg(s), received %d", expected, available)
+	}
+
+	resolved := append([]string{}, pipedArgs[:needed]...)
+	resolved = append(resolved, args...)
+	return resolved, nil
+}
+
+func readPipedArgs(expected int) ([]string, error) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return nil, nil
+	}
+
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return nil, err
+	}
+
+	return extractArgsFromInput(data, expected), nil
+}
+
+func extractArgsFromInput(data []byte, expected int) []string {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	bestScore := -1
+	var best []string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		tokens, score := parsePipedLine(line, expected)
+		if len(tokens) < expected {
+			continue
+		}
+
+		if score > bestScore {
+			bestScore = score
+			best = tokens
+		}
+	}
+
+	if len(best) == 0 {
+		return nil
+	}
+	return best
+}
+
+func parsePipedLine(line string, expected int) ([]string, int) {
+	if strings.Contains(line, "\t") {
+		return splitFields(line, func(r rune) bool { return r == '\t' }), 3
+	}
+	if strings.Contains(line, " :: ") {
+		parts := strings.Split(line, " :: ")
+		return parts, 3
+	}
+	if multiSpaceRE.MatchString(line) {
+		return multiSpaceRE.Split(line, -1), 2
+	}
+
+	fields := strings.Fields(line)
+	if expected == 1 && len(fields) > 1 {
+		if taskIDLikeRE.MatchString(fields[0]) {
+			return []string{fields[0]}, 2
+		}
+		return []string{line}, 1
+	}
+
+	return fields, 1
+}
+
+func splitFields(input string, split func(rune) bool) []string {
+	fields := strings.FieldsFunc(input, split)
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field == "" {
+			continue
+		}
+		out = append(out, field)
+	}
+	return out
 }
 
 // getActiveBoardFromSession attempts to get the active board ID from the current session
