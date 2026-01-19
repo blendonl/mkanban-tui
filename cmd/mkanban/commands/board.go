@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"mkanban/pkg/slug"
 )
 
 // boardCmd represents the board command
@@ -215,10 +216,13 @@ Examples:
 		}
 
 		// Create board
+		projectID := slug.Generate(boardID)
 		board, err := container.CreateBoardUseCase.Execute(ctx, struct {
+			ProjectID   string `json:"project_id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
 		}{
+			ProjectID:   projectID,
 			Name:        name,
 			Description: description,
 		})

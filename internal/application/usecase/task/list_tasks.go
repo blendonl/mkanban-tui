@@ -6,7 +6,9 @@ import (
 
 	"mkanban/internal/application/dto"
 	"mkanban/internal/domain/repository"
+	"mkanban/internal/domain/valueobject"
 	"mkanban/internal/infrastructure/config"
+	"mkanban/pkg/filesystem"
 )
 
 // ListTasksUseCase handles listing all tasks for a board
@@ -31,14 +33,16 @@ func (uc *ListTasksUseCase) Execute(ctx context.Context, boardID string) ([]dto.
 	}
 
 	result := make([]dto.TaskDTO, 0)
-	boardsPath := uc.config.Storage.BoardsPath
+	dataPath := uc.config.Storage.DataPath
 
 	// Iterate through all columns and their tasks
 	for _, column := range board.Columns() {
 		for _, task := range column.Tasks() {
-			// Build the file path: {boardsPath}/{boardID}/{columnName}/{taskID}/task.md
 			taskFolderName := task.ID().String()
-			filePath := filepath.Join(boardsPath, boardID, column.Name(), taskFolderName, "task.md")
+			filePath, err := buildTaskFilePath(dataPath, boardID, column.Name(), taskFolderName)
+			if err != nil {
+				return nil, err
+			}
 
 			// Convert to DTO with path and column name
 			taskDTO := dto.TaskToDTOWithPath(task, filePath, column.Name())
@@ -47,4 +51,35 @@ func (uc *ListTasksUseCase) Execute(ctx context.Context, boardID string) ([]dto.
 	}
 
 	return result, nil
+}
+
+func buildTaskFilePath(dataPath, boardID, columnName, taskFolderName string) (string, error) {
+	projectSlug, boardSlug, err := valueobject.ParseBoardID(boardID)
+	if err != nil {
+		return "", err
+	}
+	boardDir := filepath.Join(dataPath, "projects", projectSlug, "boards", boardSlug)
+	columnsDir := filepath.Join(boardDir, "columns")
+	columnsExists, err := filesystem.Exists(columnsDir)
+	if err != nil {
+		return "", err
+	}
+
+	columnRoot := boardDir
+	if columnsExists {
+		columnRoot = columnsDir
+	}
+
+	columnDir := filepath.Join(columnRoot, columnName)
+	tasksDir := filepath.Join(columnDir, "tasks")
+	tasksExists, err := filesystem.Exists(tasksDir)
+	if err != nil {
+		return "", err
+	}
+
+	if tasksExists {
+		return filepath.Join(tasksDir, taskFolderName, "task.md"), nil
+	}
+
+	return filepath.Join(columnDir, taskFolderName, "task.md"), nil
 }

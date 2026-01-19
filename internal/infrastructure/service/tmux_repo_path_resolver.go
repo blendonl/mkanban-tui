@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"mkanban/internal/domain/entity"
+	"mkanban/internal/domain/repository"
 	"mkanban/internal/domain/service"
 )
 
@@ -11,16 +13,19 @@ import (
 type TmuxRepoPathResolver struct {
 	sessionTracker service.SessionTracker
 	vcsProvider    service.VCSProvider
+	projectRepo    repository.ProjectRepository
 }
 
 // NewTmuxRepoPathResolver creates a new TmuxRepoPathResolver
 func NewTmuxRepoPathResolver(
 	sessionTracker service.SessionTracker,
 	vcsProvider service.VCSProvider,
+	projectRepo repository.ProjectRepository,
 ) *TmuxRepoPathResolver {
 	return &TmuxRepoPathResolver{
 		sessionTracker: sessionTracker,
 		vcsProvider:    vcsProvider,
+		projectRepo:    projectRepo,
 	}
 }
 
@@ -32,37 +37,49 @@ func (r *TmuxRepoPathResolver) GetRepoPathForBoard(board *entity.Board) (string,
 		return "", fmt.Errorf("tmux session tracker is not available")
 	}
 
-	boardName := board.Name()
-
-	// Get all sessions
-	sessions, err := r.sessionTracker.ListSessions()
-	if err != nil {
-		return "", fmt.Errorf("failed to list tmux sessions: %w", err)
-	}
-
-	// First, try to find a session with matching name
-	var matchingSession *entity.Session
-	for _, session := range sessions {
-		if session.Name() == boardName {
-			matchingSession = session
-			break
-		}
-	}
-
-	// If no exact match, try to get the active session as fallback
-	if matchingSession == nil {
-		activeSession, err := r.sessionTracker.GetActiveSession()
+	workingDir := ""
+	if board.ProjectID() != "" && r.projectRepo != nil {
+		project, err := r.projectRepo.FindByID(context.Background(), board.ProjectID())
 		if err != nil {
-			return "", fmt.Errorf("failed to get active session: %w", err)
+			project, _ = r.projectRepo.FindBySlug(context.Background(), board.ProjectID())
 		}
-		if activeSession == nil {
-			return "", fmt.Errorf("no active tmux session found for board %s", boardName)
+		if project != nil {
+			workingDir = project.WorkingDir()
 		}
-		matchingSession = activeSession
 	}
 
-	// Get the working directory from the session
-	workingDir := matchingSession.WorkingDir()
+	if workingDir == "" {
+		boardName := board.Name()
+
+		// Get all sessions
+		sessions, err := r.sessionTracker.ListSessions()
+		if err != nil {
+			return "", fmt.Errorf("failed to list tmux sessions: %w", err)
+		}
+
+		// First, try to find a session with matching name
+		var matchingSession *entity.Session
+		for _, session := range sessions {
+			if session.Name() == boardName {
+				matchingSession = session
+				break
+			}
+		}
+
+		// If no exact match, try to get the active session as fallback
+		if matchingSession == nil {
+			activeSession, err := r.sessionTracker.GetActiveSession()
+			if err != nil {
+				return "", fmt.Errorf("failed to get active session: %w", err)
+			}
+			if activeSession == nil {
+				return "", fmt.Errorf("no active tmux session found for board %s", boardName)
+			}
+			matchingSession = activeSession
+		}
+
+		workingDir = matchingSession.WorkingDir()
+	}
 
 	// Check if it's a git repository
 	if !r.vcsProvider.IsRepository(workingDir) {

@@ -123,6 +123,7 @@ func InitializeContainer() (*Container, error) {
 		task.NewCheckoutTaskUseCase,
 
 		// Use Cases - Session
+		session.NewSessionBoardPlanner,
 		session.NewTrackSessionsUseCase,
 		session.NewGetActiveSessionBoardUseCase,
 		session.NewSyncSessionBoardUseCase,
@@ -162,7 +163,7 @@ func ProvideConfig() (*config.Config, error) {
 }
 
 func ProvideBoardRepository(cfg *config.Config) repository.BoardRepository {
-	return filesystem.NewBoardRepository(cfg.Storage.BoardsPath)
+	return filesystem.NewBoardRepository(cfg.Storage.DataPath)
 }
 
 func ProvideValidationService(boardRepo repository.BoardRepository) *service.ValidationService {
@@ -192,8 +193,9 @@ func ProvideChangeWatcher() (service.ChangeWatcher, error) {
 func ProvideRepoPathResolver(
 	sessionTracker service.SessionTracker,
 	vcsProvider service.VCSProvider,
+	projectRepo repository.ProjectRepository,
 ) service.RepoPathResolver {
-	return infraService.NewTmuxRepoPathResolver(sessionTracker, vcsProvider)
+	return infraService.NewTmuxRepoPathResolver(sessionTracker, vcsProvider, projectRepo)
 }
 
 func ProvideBoardSyncStrategies(

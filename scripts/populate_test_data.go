@@ -9,6 +9,7 @@ import (
 	"mkanban/internal/application/dto"
 	"mkanban/internal/di"
 	"mkanban/internal/infrastructure/config"
+	"mkanban/pkg/slug"
 )
 
 func main() {
@@ -41,9 +42,11 @@ func main() {
 	if len(boards) == 0 {
 		// Create default board
 		board, err := container.CreateBoardUseCase.Execute(ctx, struct {
+			ProjectID   string `json:"project_id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
 		}{
+			ProjectID:   slug.Generate("Test Project"),
 			Name:        "Test Board",
 			Description: "Board with test data",
 		})

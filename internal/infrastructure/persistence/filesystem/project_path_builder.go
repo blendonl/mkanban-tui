@@ -4,7 +4,7 @@ import "path/filepath"
 
 const (
 	projectsDir       = "projects"
-	projectMetadataFile = "project.yml"
+	projectMetadataFile = "project.md"
 	boardsDir         = "boards"
 	notesDir          = "notes"
 	timeDir           = "time"

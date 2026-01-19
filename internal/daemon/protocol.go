@@ -68,6 +68,7 @@ type GetBoardPayload struct {
 
 // CreateBoardPayload contains data for creating a board
 type CreateBoardPayload struct {
+	ProjectID   string `json:"project_id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }

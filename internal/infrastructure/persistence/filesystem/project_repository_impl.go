@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"mkanban/internal/domain/entity"
 	"mkanban/internal/domain/repository"
+	"mkanban/internal/domain/valueobject"
 	"mkanban/internal/infrastructure/persistence/mapper"
 	"mkanban/internal/infrastructure/serialization"
 	"mkanban/pkg/filesystem"
@@ -29,15 +31,31 @@ func (r *ProjectRepositoryImpl) Save(ctx context.Context, project *entity.Projec
 		return fmt.Errorf("failed to create project directory: %w", err)
 	}
 
-	storage := mapper.ProjectToStorage(project)
-	yamlData, err := serialization.SerializeYaml(storage)
+	frontmatter := map[string]interface{}{
+		"id":          project.ID(),
+		"slug":        project.Slug(),
+		"name":        project.Name(),
+		"working_dir": project.WorkingDir(),
+		"archived":    project.Archived(),
+		"created":     project.CreatedAt().Format(time.RFC3339),
+		"modified":    project.ModifiedAt().Format(time.RFC3339),
+	}
+	if project.Color() != nil {
+		frontmatter["color"] = project.Color().String()
+	}
+	if len(project.Metadata()) > 0 {
+		frontmatter["metadata"] = project.Metadata()
+	}
+
+	projectBody := serialization.SerializeMarkdownWithTitle(project.Name(), project.Description())
+	projectDoc, err := serialization.SerializeFrontmatter(frontmatter, string(projectBody))
 	if err != nil {
 		return fmt.Errorf("failed to serialize project: %w", err)
 	}
 
 	metadataPath := r.pathBuilder.ProjectMetadata(project.Slug())
-	if err := filesystem.SafeWrite(metadataPath, yamlData, 0644); err != nil {
-		return fmt.Errorf("failed to write project.yml: %w", err)
+	if err := filesystem.SafeWrite(metadataPath, projectDoc, 0644); err != nil {
+		return fmt.Errorf("failed to write project.md: %w", err)
 	}
 
 	if err := filesystem.EnsureDir(r.pathBuilder.ProjectBoardsDir(project.Slug()), 0755); err != nil {
@@ -139,12 +157,61 @@ func (r *ProjectRepositoryImpl) loadProject(slug string) (*entity.Project, error
 
 	data, err := os.ReadFile(metadataPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read project.yml: %w", err)
+		return nil, fmt.Errorf("failed to read project.md: %w", err)
 	}
 
-	var storage mapper.ProjectStorage
-	if err := serialization.ParseYaml(data, &storage); err != nil {
-		return nil, fmt.Errorf("failed to parse project.yml: %w", err)
+	doc, err := serialization.ParseFrontmatter(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse project.md: %w", err)
+	}
+
+	markdownDoc, err := serialization.ParseMarkdownWithTitle([]byte(doc.Content))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse project.md content: %w", err)
+	}
+
+	archived := false
+	if archivedRaw, ok := doc.Frontmatter["archived"]; ok {
+		switch value := archivedRaw.(type) {
+		case bool:
+			archived = value
+		case string:
+			archived = value == "true"
+		}
+	}
+
+	storage := mapper.ProjectStorage{
+		ID:          doc.GetString("id"),
+		Name:        markdownDoc.Title,
+		Slug:        doc.GetString("slug"),
+		Description: markdownDoc.Content,
+		WorkingDir:  doc.GetString("working_dir"),
+		Archived:    archived,
+		Metadata:    map[string]string{},
+	}
+
+	if storage.Name == "" {
+		storage.Name = doc.GetString("name")
+	}
+	if storage.Name == "" {
+		storage.Name = slug
+	}
+	if storage.Slug == "" {
+		storage.Slug = valueobject.GenerateSlug(storage.Name)
+	}
+
+	if color := doc.GetString("color"); color != "" {
+		storage.Color = color
+	}
+
+	if metadataRaw, ok := doc.Frontmatter["metadata"]; ok {
+		if metadataMap, ok := metadataRaw.(map[string]interface{}); ok {
+			for key, value := range metadataMap {
+				if strValue, ok := value.(string); ok {
+					storage.Metadata[key] = strValue
+				}
+			}
+		}
 	}
 
 	return mapper.ProjectFromStorage(&storage)

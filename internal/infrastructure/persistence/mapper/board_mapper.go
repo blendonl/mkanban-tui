@@ -25,6 +25,9 @@ func BoardMetadataToStorage(board *entity.Board) (map[string]interface{}, error)
 		"modified":      board.ModifiedAt().Format(time.RFC3339),
 		"next_task_num": board.NextTaskNum(),
 	}
+	if board.ProjectID() != "" {
+		metadata["project_id"] = board.ProjectID()
+	}
 
 	return metadata, nil
 }
@@ -50,6 +53,11 @@ func BoardFromStorage(metadataDoc *serialization.FrontmatterDocument, name strin
 	nextTaskNum := metadataDoc.GetInt("next_task_num")
 	if nextTaskNum > 0 {
 		board.SetNextTaskNum(nextTaskNum)
+	}
+
+	projectID := metadataDoc.GetString("project_id")
+	if projectID != "" {
+		board.SetProjectID(projectID)
 	}
 
 	return board, nil

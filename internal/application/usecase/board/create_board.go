@@ -20,7 +20,7 @@ func NewCreateBoardUseCase(boardService *service.BoardService) *CreateBoardUseCa
 
 // Execute creates a new board
 func (uc *CreateBoardUseCase) Execute(ctx context.Context, req dto.CreateBoardRequest) (*dto.BoardDTO, error) {
-	board, err := uc.boardService.CreateBoard(ctx, req.Name, req.Description)
+	board, err := uc.boardService.CreateBoard(ctx, req.ProjectID, req.Name, req.Description)
 	if err != nil {
 		return nil, err
 	}

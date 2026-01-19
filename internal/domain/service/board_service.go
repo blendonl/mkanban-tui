@@ -31,19 +31,23 @@ func NewBoardService(
 }
 
 // CreateBoard creates a new board with validation
-func (s *BoardService) CreateBoard(ctx context.Context, name, description string) (*entity.Board, error) {
+func (s *BoardService) CreateBoard(ctx context.Context, projectID, name, description string) (*entity.Board, error) {
 	// Validate board name
 	if err := s.validationService.ValidateBoardName(ctx, name); err != nil {
 		return nil, err
 	}
 
 	// Check uniqueness
-	if err := s.validationService.ValidateUniqueBoardName(ctx, name, ""); err != nil {
+	if err := s.validationService.ValidateUniqueBoardName(ctx, projectID, name, ""); err != nil {
 		return nil, err
 	}
 
-	// Generate board ID from name
-	boardID := slug.Generate(name)
+	// Generate board ID from project and board name
+	boardSlug := slug.Generate(name)
+	boardID, err := valueobject.BuildBoardID(projectID, boardSlug)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check if board with this ID already exists
 	exists, err := s.boardRepo.Exists(ctx, boardID)
@@ -59,6 +63,7 @@ func (s *BoardService) CreateBoard(ctx context.Context, name, description string
 	if err != nil {
 		return nil, err
 	}
+	board.SetProjectID(projectID)
 
 	// Persist to repository
 	if err := s.boardRepo.Save(ctx, board); err != nil {
@@ -209,7 +214,7 @@ func (s *BoardService) CreateTask(
 				}
 
 				// Update parent description with markdown link
-				updatedDescription = AddSubtaskLink(updatedDescription, subtaskTitle, subtaskID.String(), s.config.Storage.BoardsPath, board.ID(), todoColumn.Name())
+				updatedDescription = AddSubtaskLink(updatedDescription, subtaskTitle, subtaskID.String(), todoColumn.Name())
 			}
 
 			// Update parent task description with links

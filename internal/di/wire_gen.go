@@ -43,8 +43,9 @@ func InitializeContainer() (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
-	repoPathResolver := ProvideRepoPathResolver(sessionTracker, vcsProvider)
+	repoPathResolver := ProvideRepoPathResolver(sessionTracker, vcsProvider, projectRepository)
 	v := ProvideBoardSyncStrategies(vcsProvider, config)
+	sessionBoardPlanner := session.NewSessionBoardPlanner(vcsProvider)
 	createBoardUseCase := board.NewCreateBoardUseCase(boardService)
 	getBoardUseCase := board.NewGetBoardUseCase(boardRepository)
 	listBoardsUseCase := board.NewListBoardsUseCase(boardRepository)
@@ -54,9 +55,9 @@ func InitializeContainer() (*Container, error) {
 	updateTaskUseCase := task.NewUpdateTaskUseCase(boardService)
 	listTasksUseCase := task.NewListTasksUseCase(boardRepository, config)
 	checkoutTaskUseCase := task.NewCheckoutTaskUseCase(boardRepository, vcsProvider, repoPathResolver)
-	syncSessionBoardUseCase := session.NewSyncSessionBoardUseCase(boardRepository, boardService, validationService, v)
+	syncSessionBoardUseCase := session.NewSyncSessionBoardUseCase(boardRepository, projectRepository, boardService, v, sessionBoardPlanner)
 	trackSessionsUseCase := session.NewTrackSessionsUseCase(sessionTracker, syncSessionBoardUseCase)
-	getActiveSessionBoardUseCase := session.NewGetActiveSessionBoardUseCase(sessionTracker, boardRepository, v, syncSessionBoardUseCase)
+	getActiveSessionBoardUseCase := session.NewGetActiveSessionBoardUseCase(sessionTracker, boardRepository, syncSessionBoardUseCase, sessionBoardPlanner)
 	createActionUseCase := action.NewCreateActionUseCase(actionRepository)
 	updateActionUseCase := action.NewUpdateActionUseCase(actionRepository)
 	deleteActionUseCase := action.NewDeleteActionUseCase(actionRepository)
@@ -188,7 +189,7 @@ func ProvideConfig() (*config.Config, error) {
 }
 
 func ProvideBoardRepository(cfg *config.Config) repository.BoardRepository {
-	return filesystem.NewBoardRepository(cfg.Storage.BoardsPath)
+	return filesystem.NewBoardRepository(cfg.Storage.DataPath)
 }
 
 func ProvideValidationService(boardRepo repository.BoardRepository) *service.ValidationService {
@@ -218,8 +219,9 @@ func ProvideChangeWatcher() (service.ChangeWatcher, error) {
 func ProvideRepoPathResolver(
 	sessionTracker service.SessionTracker,
 	vcsProvider service.VCSProvider,
+	projectRepo repository.ProjectRepository,
 ) service.RepoPathResolver {
-	return service2.NewTmuxRepoPathResolver(sessionTracker, vcsProvider)
+	return service2.NewTmuxRepoPathResolver(sessionTracker, vcsProvider, projectRepo)
 }
 
 func ProvideBoardSyncStrategies(

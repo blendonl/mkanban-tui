@@ -29,11 +29,6 @@ func (s *GitRepoSyncStrategy) CanHandle(session *entity.Session) bool {
 	return s.vcsProvider.IsRepository(session.WorkingDir())
 }
 
-// GetBoardName returns the session name as the board name
-func (s *GitRepoSyncStrategy) GetBoardName(session *entity.Session) string {
-	return session.Name()
-}
-
 // Sync synchronizes the board with the git repository state
 func (s *GitRepoSyncStrategy) Sync(session *entity.Session, board *entity.Board) error {
 	workingDir := session.WorkingDir()

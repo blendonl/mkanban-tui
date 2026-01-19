@@ -25,6 +25,6 @@ type BoardRepository interface {
 	// Exists checks if a board exists
 	Exists(ctx context.Context, id string) (bool, error)
 
-	// FindByName finds a board by its name
-	FindByName(ctx context.Context, name string) (*entity.Board, error)
+	// FindByName finds a board by its name within a project
+	FindByName(ctx context.Context, projectID string, name string) (*entity.Board, error)
 }

@@ -2,10 +2,10 @@ package session
 
 import (
 	"context"
-	"mkanban/internal/application/strategy"
 	"mkanban/internal/domain/entity"
 	"mkanban/internal/domain/repository"
 	"mkanban/internal/domain/service"
+	"mkanban/internal/domain/valueobject"
 	"mkanban/pkg/slug"
 )
 
@@ -13,22 +13,22 @@ import (
 type GetActiveSessionBoardUseCase struct {
 	sessionTracker service.SessionTracker
 	boardRepo      repository.BoardRepository
-	strategies     []strategy.BoardSyncStrategy
 	syncUseCase    *SyncSessionBoardUseCase
+	boardPlanner   *SessionBoardPlanner
 }
 
 // NewGetActiveSessionBoardUseCase creates a new GetActiveSessionBoardUseCase
 func NewGetActiveSessionBoardUseCase(
 	sessionTracker service.SessionTracker,
 	boardRepo repository.BoardRepository,
-	strategies []strategy.BoardSyncStrategy,
 	syncUseCase *SyncSessionBoardUseCase,
+	boardPlanner *SessionBoardPlanner,
 ) *GetActiveSessionBoardUseCase {
 	return &GetActiveSessionBoardUseCase{
 		sessionTracker: sessionTracker,
 		boardRepo:      boardRepo,
-		strategies:     strategies,
 		syncUseCase:    syncUseCase,
+		boardPlanner:   boardPlanner,
 	}
 }
 
@@ -59,28 +59,15 @@ func (uc *GetActiveSessionBoardUseCase) Execute(ctx context.Context, sessionName
 		return "", nil
 	}
 
-	// Find the appropriate strategy for this session
-	var selectedStrategy strategy.BoardSyncStrategy
-	for _, strat := range uc.strategies {
-		if strat.CanHandle(activeSession) {
-			selectedStrategy = strat
-			break
-		}
+	plan, err := uc.boardPlanner.Plan(activeSession)
+	if err != nil {
+		return "", err
 	}
 
-	if selectedStrategy == nil {
-		// No strategy can handle this session
-		return "", nil
+	boardID, err := valueobject.BuildBoardID(plan.ProjectID, slug.Generate(plan.SyncBoardName))
+	if err != nil {
+		return "", err
 	}
-
-	// Get board name from strategy
-	boardName := selectedStrategy.GetBoardName(activeSession)
-	if boardName == "" {
-		return "", nil
-	}
-
-	// Generate board ID
-	boardID := slug.Generate(boardName)
 
 	// Check if board exists
 	exists, err := uc.boardRepo.Exists(ctx, boardID)

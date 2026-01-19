@@ -215,7 +215,7 @@ Available for all commands:
 
 ```bash
 --board-id, -b <id>     Board to operate on (default: active board)
---output, -o <format>   Output format: text, json, yaml (default: text)
+--output, -o <format>   Output format: text, json, yaml, fzf, path (default: text)
 --config, -c <path>     Config file path
 --quiet, -q             Suppress non-essential output
 --help, -h              Show help
@@ -287,6 +287,9 @@ mkanban task list --priority high
 mkanban task list --overdue
 mkanban task list --tag urgent
 mkanban task list --output json
+mkanban task list --all-boards
+mkanban task list --output fzf --column "Todo" --all-boards | fzf | mkanban task checkout
+mkanban task list --output fzf | fzf | mkanban task checkout
 
 # Get task details
 mkanban task get TASK-123

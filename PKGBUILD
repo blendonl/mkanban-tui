@@ -18,8 +18,8 @@ backup=('etc/mkanban/config.yaml')
 
 if [[ -n "${MKANBAN_USE_LOCAL}" ]]; then
     # Uses the local working tree (including uncommitted changes).
-    source=("${pkgname}::file://${PWD}")
-    sha256sums=('SKIP')
+    source=()
+    sha256sums=()
 else
     # For release builds from GitHub tag:
     source=("git+${url}.git#tag=v${pkgver}")
@@ -27,7 +27,12 @@ else
 fi
 
 build() {
-    cd "${srcdir}/${pkgname}"
+    if [[ -n "${MKANBAN_USE_LOCAL}" ]]; then
+        _srcroot="${startdir}"
+    else
+        _srcroot="${srcdir}/${pkgname}"
+    fi
+    cd "${_srcroot}"
 
     export CGO_CPPFLAGS="${CPPFLAGS}"
     export CGO_CFLAGS="${CFLAGS}"
@@ -64,14 +69,24 @@ build() {
 }
 
 check() {
-    cd "${srcdir}/${pkgname}"
+    if [[ -n "${MKANBAN_USE_LOCAL}" ]]; then
+        _srcroot="${startdir}"
+    else
+        _srcroot="${srcdir}/${pkgname}"
+    fi
+    cd "${_srcroot}"
     # Run tests but don't fail the build if they fail
     # There are some pre-existing test issues that need to be fixed separately
     go test -v ./... || true
 }
 
 package() {
-    cd "${srcdir}/${pkgname}"
+    if [[ -n "${MKANBAN_USE_LOCAL}" ]]; then
+        _srcroot="${startdir}"
+    else
+        _srcroot="${srcdir}/${pkgname}"
+    fi
+    cd "${_srcroot}"
 
     # Install binaries
     install -Dm755 mkanban "${pkgdir}/usr/bin/mkanban"

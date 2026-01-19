@@ -144,7 +144,7 @@ func AllCheckboxesComplete(description string) bool {
 // AddSubtaskLink converts a plain checkbox to a linked checkbox
 // Replaces "- [ ] {title}" with "- [ ] [{title}]({taskLink})"
 // The taskLink uses relative path format: ../../{columnName}/{taskID}/task.md
-func AddSubtaskLink(description, subtaskTitle, taskID, boardsPath, boardID, columnName string) string {
+func AddSubtaskLink(description, subtaskTitle, taskID, columnName string) string {
 	lines := strings.Split(description, "\n")
 	updatedLines := make([]string, 0, len(lines))
 

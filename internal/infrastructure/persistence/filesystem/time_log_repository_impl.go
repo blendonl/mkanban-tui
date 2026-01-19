@@ -255,12 +255,12 @@ func (r *TimeLogRepositoryImpl) getProjectSlug(ctx context.Context, projectID st
 			continue
 		}
 
-		var storage mapper.ProjectStorage
-		if err := serialization.ParseYaml(data, &storage); err != nil {
+		doc, err := serialization.ParseFrontmatter(data)
+		if err != nil {
 			continue
 		}
 
-		if storage.ID == projectID {
+		if doc.GetString("id") == projectID {
 			return entry.Name(), nil
 		}
 	}

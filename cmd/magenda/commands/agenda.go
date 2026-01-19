@@ -251,10 +251,17 @@ Examples:
   magenda schedule TASK-123 --date 2025-01-15 --time 10:00
 
   # Schedule with duration
-  magenda schedule TASK-123 --date 2025-01-15 --time 10:00 --duration 2h`,
-	Args: cobra.ExactArgs(1),
+  magenda schedule TASK-123 --date 2025-01-15 --time 10:00 --duration 2h
+
+  # Pipe from task list
+  mkanban task list --output fzf | fzf | magenda schedule --date 2025-01-15`,
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		taskID := args[0]
+		resolvedArgs, err := resolveArgs(args, 1)
+		if err != nil {
+			return err
+		}
+		taskID := resolvedArgs[0]
 		dateStr, _ := cmd.Flags().GetString("date")
 		timeStr, _ := cmd.Flags().GetString("time")
 		durationStr, _ := cmd.Flags().GetString("duration")
@@ -263,7 +270,7 @@ Examples:
 			return fmt.Errorf("--date is required")
 		}
 
-		_, err := time.Parse("2006-01-02", dateStr)
+		_, err = time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			return fmt.Errorf("invalid date format, use YYYY-MM-DD")
 		}

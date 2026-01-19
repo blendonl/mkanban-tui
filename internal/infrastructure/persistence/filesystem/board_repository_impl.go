@@ -21,15 +21,18 @@ type BoardRepositoryImpl struct {
 }
 
 // NewBoardRepository creates a new filesystem-based board repository
-func NewBoardRepository(boardsPath string) repository.BoardRepository {
+func NewBoardRepository(rootPath string) repository.BoardRepository {
 	return &BoardRepositoryImpl{
-		pathBuilder: NewPathBuilder(boardsPath),
+		pathBuilder: NewPathBuilder(rootPath),
 	}
 }
 
 // Save persists a board to the filesystem
 func (r *BoardRepositoryImpl) Save(ctx context.Context, board *entity.Board) error {
-	boardDir := r.pathBuilder.BoardDir(board.ID())
+	boardDir, err := r.pathBuilder.BoardDir(board.ID())
+	if err != nil {
+		return err
+	}
 
 	// Ensure board directory exists
 	if err := filesystem.EnsureDir(boardDir, 0755); err != nil {
@@ -58,7 +61,10 @@ func (r *BoardRepositoryImpl) Save(ctx context.Context, board *entity.Board) err
 
 // FindByID retrieves a board by its ID
 func (r *BoardRepositoryImpl) FindByID(ctx context.Context, id string) (*entity.Board, error) {
-	boardDir := r.pathBuilder.BoardDir(id)
+	boardDir, err := r.pathBuilder.BoardDir(id)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check if board exists
 	exists, err := filesystem.Exists(boardDir)
@@ -85,31 +91,46 @@ func (r *BoardRepositoryImpl) FindByID(ctx context.Context, id string) (*entity.
 
 // FindAll retrieves all boards
 func (r *BoardRepositoryImpl) FindAll(ctx context.Context) ([]*entity.Board, error) {
-	rootPath := r.pathBuilder.BoardsRoot()
+	projectsRoot := r.pathBuilder.projectPathBuilder.ProjectsRoot()
 
-	// Ensure root exists
-	if err := filesystem.EnsureDir(rootPath, 0755); err != nil {
+	if err := filesystem.EnsureDir(projectsRoot, 0755); err != nil {
 		return nil, err
 	}
 
-	entries, err := os.ReadDir(rootPath)
+	projectEntries, err := os.ReadDir(projectsRoot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read boards directory: %w", err)
+		return nil, fmt.Errorf("failed to read projects directory: %w", err)
 	}
 
 	boards := make([]*entity.Board, 0)
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	for _, projectEntry := range projectEntries {
+		if !projectEntry.IsDir() {
 			continue
 		}
 
-		board, err := r.FindByID(ctx, entry.Name())
+		boardsDir := r.pathBuilder.projectPathBuilder.ProjectBoardsDir(projectEntry.Name())
+		boardEntries, err := os.ReadDir(boardsDir)
 		if err != nil {
-			// Skip boards that can't be loaded
 			continue
 		}
 
-		boards = append(boards, board)
+		for _, boardEntry := range boardEntries {
+			if !boardEntry.IsDir() {
+				continue
+			}
+
+			boardID, err := valueobject.BuildBoardID(projectEntry.Name(), boardEntry.Name())
+			if err != nil {
+				continue
+			}
+
+			board, err := r.FindByID(ctx, boardID)
+			if err != nil {
+				continue
+			}
+
+			boards = append(boards, board)
+		}
 	}
 
 	return boards, nil
@@ -117,7 +138,10 @@ func (r *BoardRepositoryImpl) FindAll(ctx context.Context) ([]*entity.Board, err
 
 // Delete removes a board from storage
 func (r *BoardRepositoryImpl) Delete(ctx context.Context, id string) error {
-	boardDir := r.pathBuilder.BoardDir(id)
+	boardDir, err := r.pathBuilder.BoardDir(id)
+	if err != nil {
+		return err
+	}
 
 	exists, err := filesystem.Exists(boardDir)
 	if err != nil {
@@ -132,18 +156,39 @@ func (r *BoardRepositoryImpl) Delete(ctx context.Context, id string) error {
 
 // Exists checks if a board exists
 func (r *BoardRepositoryImpl) Exists(ctx context.Context, id string) (bool, error) {
-	boardDir := r.pathBuilder.BoardDir(id)
+	boardDir, err := r.pathBuilder.BoardDir(id)
+	if err != nil {
+		return false, err
+	}
 	return filesystem.Exists(boardDir)
 }
 
-// FindByName finds a board by its name
-func (r *BoardRepositoryImpl) FindByName(ctx context.Context, name string) (*entity.Board, error) {
-	boards, err := r.FindAll(ctx)
+// FindByName finds a board by its name within a project
+func (r *BoardRepositoryImpl) FindByName(ctx context.Context, projectID string, name string) (*entity.Board, error) {
+	boardsDir := r.pathBuilder.projectPathBuilder.ProjectBoardsDir(projectID)
+	entries, err := os.ReadDir(boardsDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, entity.ErrBoardNotFound
+		}
 		return nil, err
 	}
 
-	for _, board := range boards {
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		boardID, err := valueobject.BuildBoardID(projectID, entry.Name())
+		if err != nil {
+			continue
+		}
+
+		board, err := r.FindByID(ctx, boardID)
+		if err != nil {
+			continue
+		}
+
 		if board.Name() == name {
 			return board, nil
 		}
@@ -165,14 +210,20 @@ func (r *BoardRepositoryImpl) saveBoardMetadata(board *entity.Board) error {
 		return fmt.Errorf("failed to serialize metadata: %w", err)
 	}
 
-	metadataPath := r.pathBuilder.BoardMetadataYaml(board.ID())
+	metadataPath, err := r.pathBuilder.BoardMetadataYaml(board.ID())
+	if err != nil {
+		return err
+	}
 	if err := filesystem.SafeWrite(metadataPath, metadataYaml, 0644); err != nil {
 		return fmt.Errorf("failed to write metadata.yml: %w", err)
 	}
 
 	// Save board.md with name and description
 	markdown := mapper.BoardContentToMarkdown(board)
-	contentPath := r.pathBuilder.BoardContent(board.ID())
+	contentPath, err := r.pathBuilder.BoardContent(board.ID())
+	if err != nil {
+		return err
+	}
 	if err := filesystem.SafeWrite(contentPath, markdown, 0644); err != nil {
 		return fmt.Errorf("failed to write board.md: %w", err)
 	}
@@ -183,8 +234,14 @@ func (r *BoardRepositoryImpl) saveBoardMetadata(board *entity.Board) error {
 // loadBoardMetadata loads board metadata from metadata.yml and board.md (with backward compatibility)
 func (r *BoardRepositoryImpl) loadBoardMetadata(boardID string) (*entity.Board, error) {
 	// Try new format first: metadata.yml + board.md
-	metadataYamlPath := r.pathBuilder.BoardMetadataYaml(boardID)
-	contentPath := r.pathBuilder.BoardContent(boardID)
+	metadataYamlPath, err := r.pathBuilder.BoardMetadataYaml(boardID)
+	if err != nil {
+		return nil, err
+	}
+	contentPath, err := r.pathBuilder.BoardContent(boardID)
+	if err != nil {
+		return nil, err
+	}
 
 	metadataYamlData, metadataErr := os.ReadFile(metadataYamlPath)
 	contentData, contentErr := os.ReadFile(contentPath)
@@ -207,7 +264,17 @@ func (r *BoardRepositoryImpl) loadBoardMetadata(boardID string) (*entity.Board, 
 			Frontmatter: metadataMap,
 		}
 
-		return mapper.BoardFromStorage(doc, markdownDoc.Title, markdownDoc.Content)
+		board, err := mapper.BoardFromStorage(doc, markdownDoc.Title, markdownDoc.Content)
+		if err != nil {
+			return nil, err
+		}
+		if board.ProjectID() == "" {
+			projectSlug, _, err := valueobject.ParseBoardID(boardID)
+			if err == nil {
+				board.SetProjectID(projectSlug)
+			}
+		}
+		return board, nil
 	}
 
 	// Fallback to old format: board.md with frontmatter
@@ -230,7 +297,10 @@ func (r *BoardRepositoryImpl) loadBoardMetadata(boardID string) (*entity.Board, 
 func (r *BoardRepositoryImpl) saveColumn(boardID string, column *entity.Column) error {
 	// Generate normalized folder name from display name if needed
 	normalizedName := slug.Generate(column.DisplayName())
-	columnDir := r.pathBuilder.ColumnDir(boardID, normalizedName)
+	columnDir, err := r.pathBuilder.ColumnDir(boardID, normalizedName)
+	if err != nil {
+		return err
+	}
 
 	// Ensure column directory exists
 	if err := filesystem.EnsureDir(columnDir, 0755); err != nil {
@@ -248,14 +318,20 @@ func (r *BoardRepositoryImpl) saveColumn(boardID string, column *entity.Column) 
 		return fmt.Errorf("failed to serialize column metadata: %w", err)
 	}
 
-	metadataYamlPath := r.pathBuilder.ColumnMetadataYaml(boardID, normalizedName)
+	metadataYamlPath, err := r.pathBuilder.ColumnMetadataYaml(boardID, normalizedName)
+	if err != nil {
+		return err
+	}
 	if err := filesystem.SafeWrite(metadataYamlPath, yamlData, 0644); err != nil {
 		return fmt.Errorf("failed to write column metadata.yml: %w", err)
 	}
 
 	// Save column.md with display name and description
 	markdown := mapper.ColumnContentToMarkdown(column)
-	contentPath := r.pathBuilder.ColumnContent(boardID, normalizedName)
+	contentPath, err := r.pathBuilder.ColumnContent(boardID, normalizedName)
+	if err != nil {
+		return err
+	}
 	if err := filesystem.SafeWrite(contentPath, markdown, 0644); err != nil {
 		return fmt.Errorf("failed to write column.md: %w", err)
 	}
@@ -277,7 +353,11 @@ func (r *BoardRepositoryImpl) saveColumn(boardID string, column *entity.Column) 
 
 // loadColumns loads all columns for a board
 func (r *BoardRepositoryImpl) loadColumns(board *entity.Board) error {
-	columnsDir := filepath.Join(r.pathBuilder.BoardDir(board.ID()), "columns")
+	boardDir, err := r.pathBuilder.BoardDir(board.ID())
+	if err != nil {
+		return err
+	}
+	columnsDir := filepath.Join(boardDir, "columns")
 
 	// Check if columns directory exists (new format)
 	exists, err := filesystem.Exists(columnsDir)
@@ -287,7 +367,7 @@ func (r *BoardRepositoryImpl) loadColumns(board *entity.Board) error {
 
 	// If columns/ doesn't exist, try loading from board root (legacy format)
 	if !exists {
-		return r.loadColumnsLegacy(board)
+		return fmt.Errorf("missing columns directory for board: %s", board.ID())
 	}
 
 	entries, err := os.ReadDir(columnsDir)
@@ -319,7 +399,10 @@ func (r *BoardRepositoryImpl) loadColumns(board *entity.Board) error {
 
 // loadColumnsLegacy loads columns from board root directory (legacy format)
 func (r *BoardRepositoryImpl) loadColumnsLegacy(board *entity.Board) error {
-	boardDir := r.pathBuilder.BoardDir(board.ID())
+	boardDir, err := r.pathBuilder.BoardDir(board.ID())
+	if err != nil {
+		return err
+	}
 
 	entries, err := os.ReadDir(boardDir)
 	if err != nil {
@@ -370,8 +453,14 @@ func (r *BoardRepositoryImpl) loadColumnsLegacy(board *entity.Board) error {
 // loadColumn loads a column and its tasks
 func (r *BoardRepositoryImpl) loadColumn(boardID, columnFolderName string) (*entity.Column, error) {
 	// Try new format first: metadata.yml + column.md
-	metadataYamlPath := r.pathBuilder.ColumnMetadataYaml(boardID, columnFolderName)
-	contentPath := r.pathBuilder.ColumnContent(boardID, columnFolderName)
+	metadataYamlPath, err := r.pathBuilder.ColumnMetadataYaml(boardID, columnFolderName)
+	if err != nil {
+		return nil, err
+	}
+	contentPath, err := r.pathBuilder.ColumnContent(boardID, columnFolderName)
+	if err != nil {
+		return nil, err
+	}
 
 	metadataYamlData, metadataErr := os.ReadFile(metadataYamlPath)
 	contentData, contentErr := os.ReadFile(contentPath)
@@ -459,7 +548,10 @@ func (r *BoardRepositoryImpl) loadColumn(boardID, columnFolderName string) (*ent
 
 // loadColumnLegacy loads a column from the legacy location (directly under board directory)
 func (r *BoardRepositoryImpl) loadColumnLegacy(boardID, columnFolderName string) (*entity.Column, error) {
-	boardDir := r.pathBuilder.BoardDir(boardID)
+	boardDir, err := r.pathBuilder.BoardDir(boardID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Try new format first: metadata.yml + column.md
 	metadataYamlPath := filepath.Join(boardDir, columnFolderName, "metadata.yml")
@@ -558,7 +650,10 @@ func (r *BoardRepositoryImpl) SaveTask(ctx context.Context, boardID string, colu
 func (r *BoardRepositoryImpl) saveTask(boardID, columnName string, task *entity.Task) error {
 	// Task folder name is the full task ID
 	taskFolderName := task.ID().String()
-	taskDir := r.pathBuilder.TaskDir(boardID, columnName, taskFolderName)
+	taskDir, err := r.pathBuilder.TaskDir(boardID, columnName, taskFolderName)
+	if err != nil {
+		return err
+	}
 
 	// Ensure task directory exists
 	if err := filesystem.EnsureDir(taskDir, 0755); err != nil {
@@ -572,7 +667,10 @@ func (r *BoardRepositoryImpl) saveTask(boardID, columnName string, task *entity.
 	}
 
 	// Save metadata.yml
-	metadataYamlPath := r.pathBuilder.TaskMetadataYaml(boardID, columnName, taskFolderName)
+	metadataYamlPath, err := r.pathBuilder.TaskMetadataYaml(boardID, columnName, taskFolderName)
+	if err != nil {
+		return err
+	}
 	metadataYamlData, err := serialization.SerializeYaml(storage)
 	if err != nil {
 		return fmt.Errorf("failed to serialize metadata: %w", err)
@@ -582,7 +680,10 @@ func (r *BoardRepositoryImpl) saveTask(boardID, columnName string, task *entity.
 	}
 
 	// Save task.md
-	taskMdPath := r.pathBuilder.TaskMetadata(boardID, columnName, taskFolderName)
+	taskMdPath, err := r.pathBuilder.TaskMetadata(boardID, columnName, taskFolderName)
+	if err != nil {
+		return err
+	}
 	if err := filesystem.SafeWrite(taskMdPath, markdownContent, 0644); err != nil {
 		return fmt.Errorf("failed to write task.md: %w", err)
 	}
@@ -592,7 +693,10 @@ func (r *BoardRepositoryImpl) saveTask(boardID, columnName string, task *entity.
 
 // loadTasks loads all tasks for a column
 func (r *BoardRepositoryImpl) loadTasks(boardID string, columnFolderName string, column *entity.Column) error {
-	columnDir := r.pathBuilder.ColumnDir(boardID, columnFolderName)
+	columnDir, err := r.pathBuilder.ColumnDir(boardID, columnFolderName)
+	if err != nil {
+		return err
+	}
 	tasksDir := filepath.Join(columnDir, "tasks")
 
 	// Check if tasks/ subdirectory exists (new format)
@@ -634,7 +738,10 @@ func (r *BoardRepositoryImpl) loadTasks(boardID string, columnFolderName string,
 
 // loadTasksFromColumnRoot loads tasks directly from column root (legacy format without tasks/ subdirectory)
 func (r *BoardRepositoryImpl) loadTasksFromColumnRoot(boardID string, columnFolderName string, column *entity.Column) error {
-	columnDir := r.pathBuilder.ColumnDir(boardID, columnFolderName)
+	columnDir, err := r.pathBuilder.ColumnDir(boardID, columnFolderName)
+	if err != nil {
+		return err
+	}
 
 	entries, err := os.ReadDir(columnDir)
 	if err != nil {
@@ -668,7 +775,10 @@ func (r *BoardRepositoryImpl) loadTasksFromColumnRoot(boardID string, columnFold
 
 // loadTasksLegacy loads all tasks for a column from legacy location (directly under board)
 func (r *BoardRepositoryImpl) loadTasksLegacy(boardID string, columnFolderName string, column *entity.Column) error {
-	boardDir := r.pathBuilder.BoardDir(boardID)
+	boardDir, err := r.pathBuilder.BoardDir(boardID)
+	if err != nil {
+		return err
+	}
 	columnDir := filepath.Join(boardDir, columnFolderName)
 
 	entries, err := os.ReadDir(columnDir)
@@ -712,7 +822,10 @@ func (r *BoardRepositoryImpl) isTaskDirectory(name string) bool {
 // loadTask loads a single task
 func (r *BoardRepositoryImpl) loadTask(boardID, columnName, taskFolderName string) (*entity.Task, error) {
 	// Read metadata.yml
-	metadataYamlPath := r.pathBuilder.TaskMetadataYaml(boardID, columnName, taskFolderName)
+	metadataYamlPath, err := r.pathBuilder.TaskMetadataYaml(boardID, columnName, taskFolderName)
+	if err != nil {
+		return nil, err
+	}
 	metadataYamlData, err := os.ReadFile(metadataYamlPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata.yml: %w", err)
@@ -725,7 +838,10 @@ func (r *BoardRepositoryImpl) loadTask(boardID, columnName, taskFolderName strin
 	}
 
 	// Read task.md
-	taskMdPath := r.pathBuilder.TaskMetadata(boardID, columnName, taskFolderName)
+	taskMdPath, err := r.pathBuilder.TaskMetadata(boardID, columnName, taskFolderName)
+	if err != nil {
+		return nil, err
+	}
 	markdownData, err := os.ReadFile(taskMdPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read task.md: %w", err)
@@ -743,7 +859,10 @@ func (r *BoardRepositoryImpl) loadTask(boardID, columnName, taskFolderName strin
 
 // loadTaskFromColumnRoot loads a single task from column root (legacy format without tasks/ subdirectory)
 func (r *BoardRepositoryImpl) loadTaskFromColumnRoot(boardID, columnName, taskFolderName string) (*entity.Task, error) {
-	columnDir := r.pathBuilder.ColumnDir(boardID, columnName)
+	columnDir, err := r.pathBuilder.ColumnDir(boardID, columnName)
+	if err != nil {
+		return nil, err
+	}
 
 	// Read metadata.yml from column root
 	metadataYamlPath := filepath.Join(columnDir, taskFolderName, "metadata.yml")
@@ -776,7 +895,10 @@ func (r *BoardRepositoryImpl) loadTaskFromColumnRoot(boardID, columnName, taskFo
 
 // loadTaskLegacy loads a single task from legacy location (directly under board)
 func (r *BoardRepositoryImpl) loadTaskLegacy(boardID, columnName, taskFolderName string) (*entity.Task, error) {
-	boardDir := r.pathBuilder.BoardDir(boardID)
+	boardDir, err := r.pathBuilder.BoardDir(boardID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Read metadata.yml from legacy location
 	metadataYamlPath := filepath.Join(boardDir, columnName, taskFolderName, "metadata.yml")
@@ -810,7 +932,11 @@ func (r *BoardRepositoryImpl) loadTaskLegacy(boardID, columnName, taskFolderName
 
 // cleanupOldColumns removes column directories that no longer exist in the board
 func (r *BoardRepositoryImpl) cleanupOldColumns(board *entity.Board) error {
-	columnsDir := filepath.Join(r.pathBuilder.BoardDir(board.ID()), "columns")
+	boardDir, err := r.pathBuilder.BoardDir(board.ID())
+	if err != nil {
+		return err
+	}
+	columnsDir := filepath.Join(boardDir, "columns")
 
 	// Check if columns directory exists
 	exists, err := filesystem.Exists(columnsDir)
@@ -842,7 +968,10 @@ func (r *BoardRepositoryImpl) cleanupOldColumns(board *entity.Board) error {
 		}
 
 		if !currentColumns[entry.Name()] {
-			columnDir := r.pathBuilder.ColumnDir(board.ID(), entry.Name())
+			columnDir, err := r.pathBuilder.ColumnDir(board.ID(), entry.Name())
+			if err != nil {
+				return err
+			}
 			if err := filesystem.RemoveDir(columnDir); err != nil {
 				return err
 			}
@@ -854,7 +983,10 @@ func (r *BoardRepositoryImpl) cleanupOldColumns(board *entity.Board) error {
 
 // cleanupOldTasks removes task directories that no longer exist in the column
 func (r *BoardRepositoryImpl) cleanupOldTasks(boardID string, columnFolderName string, column *entity.Column) error {
-	columnDir := r.pathBuilder.ColumnDir(boardID, columnFolderName)
+	columnDir, err := r.pathBuilder.ColumnDir(boardID, columnFolderName)
+	if err != nil {
+		return err
+	}
 	tasksDir := filepath.Join(columnDir, "tasks")
 
 	// Check if tasks/ subdirectory exists
@@ -886,7 +1018,10 @@ func (r *BoardRepositoryImpl) cleanupOldTasks(boardID string, columnFolderName s
 		}
 
 		if !currentTasks[entry.Name()] {
-			taskDir := r.pathBuilder.TaskDir(boardID, columnFolderName, entry.Name())
+			taskDir, err := r.pathBuilder.TaskDir(boardID, columnFolderName, entry.Name())
+			if err != nil {
+				return err
+			}
 			if err := filesystem.RemoveDir(taskDir); err != nil {
 				return err
 			}
@@ -898,7 +1033,10 @@ func (r *BoardRepositoryImpl) cleanupOldTasks(boardID string, columnFolderName s
 
 // MigrateColumnsToSubdirectory migrates columns from board root to columns/ subdirectory
 func (r *BoardRepositoryImpl) MigrateColumnsToSubdirectory(ctx context.Context, boardID string) error {
-	boardDir := r.pathBuilder.BoardDir(boardID)
+	boardDir, err := r.pathBuilder.BoardDir(boardID)
+	if err != nil {
+		return err
+	}
 	columnsDir := filepath.Join(boardDir, "columns")
 
 	// Check if columns/ already exists
@@ -967,7 +1105,11 @@ func (r *BoardRepositoryImpl) MigrateColumnsToSubdirectory(ctx context.Context, 
 
 // MigrateColumnsToNewFormat migrates old column format to new normalized format
 func (r *BoardRepositoryImpl) MigrateColumnsToNewFormat(ctx context.Context, boardID string) error {
-	columnsDir := filepath.Join(r.pathBuilder.BoardDir(boardID), "columns")
+	boardDir, err := r.pathBuilder.BoardDir(boardID)
+	if err != nil {
+		return err
+	}
+	columnsDir := filepath.Join(boardDir, "columns")
 
 	// Check if columns/ directory exists
 	exists, err := filesystem.Exists(columnsDir)
@@ -977,7 +1119,7 @@ func (r *BoardRepositoryImpl) MigrateColumnsToNewFormat(ctx context.Context, boa
 
 	// If columns/ doesn't exist, try legacy location
 	if !exists {
-		columnsDir = r.pathBuilder.BoardDir(boardID)
+		columnsDir = boardDir
 	}
 
 	entries, err := os.ReadDir(columnsDir)
@@ -998,13 +1140,19 @@ func (r *BoardRepositoryImpl) MigrateColumnsToNewFormat(ctx context.Context, boa
 		columnFolderName := entry.Name()
 
 		// Check if this column already has metadata.yml (already migrated)
-		metadataYamlPath := r.pathBuilder.ColumnMetadataYaml(boardID, columnFolderName)
+		metadataYamlPath, err := r.pathBuilder.ColumnMetadataYaml(boardID, columnFolderName)
+		if err != nil {
+			return err
+		}
 		if exists, _ := filesystem.Exists(metadataYamlPath); exists {
 			continue
 		}
 
 		// Check if this is a column directory (has column.md with frontmatter)
-		contentPath := r.pathBuilder.ColumnContent(boardID, columnFolderName)
+		contentPath, err := r.pathBuilder.ColumnContent(boardID, columnFolderName)
+		if err != nil {
+			return err
+		}
 		if exists, _ := filesystem.Exists(contentPath); !exists {
 			continue
 		}
@@ -1026,8 +1174,14 @@ func (r *BoardRepositoryImpl) MigrateColumnsToNewFormat(ctx context.Context, boa
 
 		// If normalized name is different, we need to rename the folder
 		if normalizedName != columnFolderName {
-			oldColumnDir := r.pathBuilder.ColumnDir(boardID, columnFolderName)
-			newColumnDir := r.pathBuilder.ColumnDir(boardID, normalizedName)
+			oldColumnDir, err := r.pathBuilder.ColumnDir(boardID, columnFolderName)
+			if err != nil {
+				return err
+			}
+			newColumnDir, err := r.pathBuilder.ColumnDir(boardID, normalizedName)
+			if err != nil {
+				return err
+			}
 
 			// Rename the folder
 			if err := os.Rename(oldColumnDir, newColumnDir); err != nil {
@@ -1056,14 +1210,20 @@ func (r *BoardRepositoryImpl) MigrateColumnsToNewFormat(ctx context.Context, boa
 			return fmt.Errorf("failed to serialize column metadata: %w", err)
 		}
 
-		metadataYamlPath = r.pathBuilder.ColumnMetadataYaml(boardID, columnFolderName)
+		metadataYamlPath, err = r.pathBuilder.ColumnMetadataYaml(boardID, columnFolderName)
+		if err != nil {
+			return err
+		}
 		if err := filesystem.SafeWrite(metadataYamlPath, yamlData, 0644); err != nil {
 			return fmt.Errorf("failed to write metadata.yml: %w", err)
 		}
 
 		// Create new column.md with display name and description
 		markdownContent := serialization.SerializeMarkdownWithTitle(displayName, description)
-		contentPath = r.pathBuilder.ColumnContent(boardID, columnFolderName)
+		contentPath, err = r.pathBuilder.ColumnContent(boardID, columnFolderName)
+		if err != nil {
+			return err
+		}
 		if err := filesystem.SafeWrite(contentPath, markdownContent, 0644); err != nil {
 			return fmt.Errorf("failed to write column.md: %w", err)
 		}
@@ -1074,7 +1234,11 @@ func (r *BoardRepositoryImpl) MigrateColumnsToNewFormat(ctx context.Context, boa
 
 // MigrateTasksToSubdirectory migrates tasks from column root to tasks/ subdirectory
 func (r *BoardRepositoryImpl) MigrateTasksToSubdirectory(ctx context.Context, boardID string) error {
-	columnsDir := filepath.Join(r.pathBuilder.BoardDir(boardID), "columns")
+	boardDir, err := r.pathBuilder.BoardDir(boardID)
+	if err != nil {
+		return err
+	}
+	columnsDir := filepath.Join(boardDir, "columns")
 
 	// Check if columns/ directory exists
 	exists, err := filesystem.Exists(columnsDir)
@@ -1084,7 +1248,7 @@ func (r *BoardRepositoryImpl) MigrateTasksToSubdirectory(ctx context.Context, bo
 
 	// If columns/ doesn't exist, try legacy location (columns directly under board)
 	if !exists {
-		columnsDir = r.pathBuilder.BoardDir(boardID)
+		columnsDir = boardDir
 	}
 
 	entries, err := os.ReadDir(columnsDir)

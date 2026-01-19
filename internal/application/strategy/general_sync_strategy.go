@@ -25,12 +25,6 @@ func (s *GeneralSyncStrategy) CanHandle(session *entity.Session) bool {
 	return true
 }
 
-// GetBoardName returns the configured general board name
-// All non-git sessions use the same board
-func (s *GeneralSyncStrategy) GetBoardName(session *entity.Session) string {
-	return s.generalBoardName
-}
-
 // Sync does nothing for general sessions
 // The board exists, but no automatic tasks are created
 // Users can manually add tasks to this shared board

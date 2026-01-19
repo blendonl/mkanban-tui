@@ -124,7 +124,7 @@ func Execute() {
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&boardID, "board-id", "b", "", "Board to operate on (default: active board from session)")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "text", "Output format: text, json, yaml")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "text", "Output format: text, json, yaml, fzf, path")
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Config file path")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress non-essential output")
 

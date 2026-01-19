@@ -57,6 +57,7 @@ Output formats:
   text - Human-readable table (default)
   json - JSON output for scripting
   yaml - YAML output
+  fzf  - Task ID and title (tab-separated)
   path - File paths with titles (format: path :: title)
 
 Examples:
@@ -78,18 +79,19 @@ Examples:
   # List tasks with specific tag
   mkanban task list --tag urgent
 
+  # List tasks across all boards
+  mkanban task list --all-boards
+
   # List in path format (for scripting)
   mkanban task list --output path
+
+  # Pipe to fzf and checkout the selected task
+  mkanban task list --output fzf | fzf | mkanban task checkout
 
   # Combine filters
   mkanban task list --column "In Progress" --priority high --output json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
-
-		boardID, err := getBoardID(ctx)
-		if err != nil {
-			return err
-		}
 
 		// Get filters
 		column, _ := cmd.Flags().GetString("column")
@@ -98,32 +100,18 @@ Examples:
 		tag, _ := cmd.Flags().GetString("tag")
 		overdue, _ := cmd.Flags().GetBool("overdue")
 		dueBefore, _ := cmd.Flags().GetString("due-before")
+		allBoards, _ := cmd.Flags().GetBool("all-boards")
 
-		// Get all tasks
-		tasks, err := container.ListTasksUseCase.Execute(ctx, boardID)
-		if err != nil {
-			return fmt.Errorf("failed to list tasks: %w", err)
-		}
-
-		// Apply filters
-		filteredTasks := make([]dto.TaskDTO, 0)
-		for _, task := range tasks {
-			// Column filter
+		matchesFilters := func(task dto.TaskDTO) (bool, error) {
 			if column != "" && task.ColumnName != column {
-				continue
+				return false, nil
 			}
-
-			// Priority filter
 			if priority != "" && task.Priority != priority {
-				continue
+				return false, nil
 			}
-
-			// Status filter
 			if status != "" && task.Status != status {
-				continue
+				return false, nil
 			}
-
-			// Tag filter
 			if tag != "" {
 				hasTag := false
 				for _, t := range task.Tags {
@@ -133,113 +121,208 @@ Examples:
 					}
 				}
 				if !hasTag {
-					continue
+					return false, nil
 				}
 			}
-
-			// Overdue filter
 			if overdue {
 				if task.DueDate == nil {
-					continue
+					return false, nil
 				}
 				if time.Now().Before(*task.DueDate) {
-					continue
+					return false, nil
 				}
 			}
-
-			// Due before filter
 			if dueBefore != "" {
 				if task.DueDate == nil {
-					continue
+					return false, nil
 				}
 				dueBeforeDate, err := time.Parse("2006-01-02", dueBefore)
 				if err != nil {
-					return fmt.Errorf("invalid due-before date format. Use YYYY-MM-DD: %w", err)
+					return false, fmt.Errorf("invalid due-before date format. Use YYYY-MM-DD: %w", err)
 				}
 				if task.DueDate.After(dueBeforeDate) {
-					continue
+					return false, nil
 				}
 			}
+			return true, nil
+		}
 
-			filteredTasks = append(filteredTasks, task)
+		type taskWithBoard struct {
+			dto.TaskDTO
+			BoardID   string `json:"board_id"`
+			BoardName string `json:"board_name"`
+		}
+
+		filteredTasks := make([]dto.TaskDTO, 0)
+		filteredTasksWithBoard := make([]taskWithBoard, 0)
+		var boards []dto.BoardListDTO
+
+		if allBoards {
+			var err error
+			boards, err = container.ListBoardsUseCase.Execute(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to list boards: %w", err)
+			}
+
+			for _, board := range boards {
+				tasks, err := container.ListTasksUseCase.Execute(ctx, board.ID)
+				if err != nil {
+					return fmt.Errorf("failed to list tasks for board %s: %w", board.ID, err)
+				}
+
+				for _, task := range tasks {
+					matches, err := matchesFilters(task)
+					if err != nil {
+						return err
+					}
+					if !matches {
+						continue
+					}
+					filteredTasksWithBoard = append(filteredTasksWithBoard, taskWithBoard{
+						TaskDTO:   task,
+						BoardID:   board.ID,
+						BoardName: board.Name,
+					})
+				}
+			}
+		} else {
+			boardID, err := getBoardID(ctx)
+			if err != nil {
+				return err
+			}
+
+			tasks, err := container.ListTasksUseCase.Execute(ctx, boardID)
+			if err != nil {
+				return fmt.Errorf("failed to list tasks: %w", err)
+			}
+
+			for _, task := range tasks {
+				matches, err := matchesFilters(task)
+				if err != nil {
+					return err
+				}
+				if !matches {
+					continue
+				}
+				filteredTasks = append(filteredTasks, task)
+			}
 		}
 
 		// Format output
 		switch outputFormat {
 		case "fzf":
+			if allBoards {
+				for _, task := range filteredTasksWithBoard {
+					fmt.Printf("%s\t%s\t[%s]\n", task.ShortID, task.Title, task.BoardName)
+				}
+				return nil
+			}
 			for _, task := range filteredTasks {
 				fmt.Printf("%s\t%s\n", task.ShortID, task.Title)
 			}
 			return nil
 		case "path":
+			if allBoards {
+				for _, task := range filteredTasksWithBoard {
+					fmt.Printf("%s :: %s :: %s\n", task.FilePath, task.Title, task.BoardName)
+				}
+				return nil
+			}
 			for _, task := range filteredTasks {
 				fmt.Printf("%s :: %s\n", task.FilePath, task.Title)
 			}
 			return nil
 		case "json", "yaml":
+			if allBoards {
+				return formatter.Print(filteredTasksWithBoard)
+			}
 			return formatter.Print(filteredTasks)
 		default:
 			// Text format
+			if allBoards {
+				if len(filteredTasksWithBoard) == 0 {
+					printer.Info("No tasks found")
+					return nil
+				}
+
+				tasksByBoard := make(map[string][]dto.TaskDTO)
+				for _, task := range filteredTasksWithBoard {
+					tasksByBoard[task.BoardID] = append(tasksByBoard[task.BoardID], task.TaskDTO)
+				}
+
+				for _, board := range boards {
+					boardTasks := tasksByBoard[board.ID]
+					if len(boardTasks) == 0 {
+						continue
+					}
+
+					printer.Header("%s (%s)", board.Name, board.ID)
+					fmt.Println()
+					printTaskColumns(boardTasks)
+					printer.Info("Total: %d tasks", len(boardTasks))
+					fmt.Println()
+				}
+				return nil
+			}
+
 			if len(filteredTasks) == 0 {
 				printer.Info("No tasks found")
 				return nil
 			}
 
-			// Group by column
-			columns := make(map[string][]dto.TaskDTO)
-			for _, task := range filteredTasks {
-				columns[task.ColumnName] = append(columns[task.ColumnName], task)
-			}
-
-			// Print tasks grouped by column
-			for colName, colTasks := range columns {
-				printer.Header(colName)
-				fmt.Println()
-
-				for _, task := range colTasks {
-					// Format priority
-					priorityIcon := "⚪"
-					if task.Priority == "high" || task.Priority == "critical" {
-						priorityIcon = "⚫"
-					}
-
-					// Format due date
-					dueInfo := ""
-					if task.DueDate != nil {
-						daysUntil := int(time.Until(*task.DueDate).Hours() / 24)
-						if daysUntil < 0 {
-							dueInfo = fmt.Sprintf("📅 overdue %d days", -daysUntil)
-						} else if daysUntil == 0 {
-							dueInfo = "📅 due today"
-						} else if daysUntil == 1 {
-							dueInfo = "📅 due tomorrow"
-						} else if daysUntil < 7 {
-							dueInfo = fmt.Sprintf("📅 due in %d days", daysUntil)
-						}
-					}
-
-					// Format tags
-					tagsInfo := ""
-					if len(task.Tags) > 0 {
-						tagsInfo = "🏷️  " + strings.Join(task.Tags, ", ")
-					}
-
-					// Print task
-					printer.Println("  %s %s %s", priorityIcon, task.ShortID, task.Title)
-					if dueInfo != "" {
-						printer.Subtle("      %s", dueInfo)
-					}
-					if tagsInfo != "" {
-						printer.Subtle("      %s", tagsInfo)
-					}
-					fmt.Println()
-				}
-			}
+			printTaskColumns(filteredTasks)
 
 			printer.Info("Total: %d tasks", len(filteredTasks))
 			return nil
 		}
 	},
+}
+
+func printTaskColumns(tasks []dto.TaskDTO) {
+	columns := make(map[string][]dto.TaskDTO)
+	for _, task := range tasks {
+		columns[task.ColumnName] = append(columns[task.ColumnName], task)
+	}
+
+	for colName, colTasks := range columns {
+		printer.Header(colName)
+		fmt.Println()
+
+		for _, task := range colTasks {
+			priorityIcon := "⚪"
+			if task.Priority == "high" || task.Priority == "critical" {
+				priorityIcon = "⚫"
+			}
+
+			dueInfo := ""
+			if task.DueDate != nil {
+				daysUntil := int(time.Until(*task.DueDate).Hours() / 24)
+				if daysUntil < 0 {
+					dueInfo = fmt.Sprintf("📅 overdue %d days", -daysUntil)
+				} else if daysUntil == 0 {
+					dueInfo = "📅 due today"
+				} else if daysUntil == 1 {
+					dueInfo = "📅 due tomorrow"
+				} else if daysUntil < 7 {
+					dueInfo = fmt.Sprintf("📅 due in %d days", daysUntil)
+				}
+			}
+
+			tagsInfo := ""
+			if len(task.Tags) > 0 {
+				tagsInfo = "🏷️  " + strings.Join(task.Tags, ", ")
+			}
+
+			printer.Println("  %s %s %s", priorityIcon, task.ShortID, task.Title)
+			if dueInfo != "" {
+				printer.Subtle("      %s", dueInfo)
+			}
+			if tagsInfo != "" {
+				printer.Subtle("      %s", tagsInfo)
+			}
+			fmt.Println()
+		}
+	}
 }
 
 // taskGetCmd gets a specific task
@@ -992,20 +1075,15 @@ Examples:
 	},
 }
 
-// taskShowCmd shows a task with context
+// taskShowCmd opens a task in the editor
 var taskShowCmd = &cobra.Command{
 	Use:   "show <task-id>",
-	Short: "Show task with context",
-	Long: `Show a task along with neighboring tasks in the same column.
-
-This provides context about where the task fits in the column.
+	Short: "Open task in editor",
+	Long: `Open a task file in your configured editor ($EDITOR).
 
 Examples:
-  # Show task with 2 tasks before/after
-  mkanban task show TASK-123 --context 2
-
-  # Show task with more context
-  mkanban task show TASK-123 --context 5`,
+  # Open task for editing
+  mkanban task show TASK-123`,
 	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := getContext()
@@ -1020,31 +1098,15 @@ Examples:
 			return err
 		}
 
-		contextCount, _ := cmd.Flags().GetInt("context")
-
-		// Get board
-		board, err := container.GetBoardUseCase.Execute(ctx, boardID)
+		tasks, err := container.ListTasksUseCase.Execute(ctx, boardID)
 		if err != nil {
-			return fmt.Errorf("failed to get board: %w", err)
+			return fmt.Errorf("failed to list tasks: %w", err)
 		}
 
-		// Find task and its position
 		var foundTask *dto.TaskDTO
-		var columnName string
-		var taskIndex int
-		var columnTasks []dto.TaskDTO
-
-		for _, col := range board.Columns {
-			for i, task := range col.Tasks {
-				if task.ShortID == taskID || task.ID == taskID {
-					foundTask = &col.Tasks[i]
-					columnName = col.Name
-					taskIndex = i
-					columnTasks = col.Tasks
-					break
-				}
-			}
-			if foundTask != nil {
+		for i, task := range tasks {
+			if task.ShortID == taskID || task.ID == taskID {
+				foundTask = &tasks[i]
 				break
 			}
 		}
@@ -1053,37 +1115,15 @@ Examples:
 			return fmt.Errorf("task '%s' not found", taskID)
 		}
 
-		// Print column header
-		printer.Header("%s (%d tasks)", columnName, len(columnTasks))
-		fmt.Println()
-
-		// Print tasks with context
-		start := max(0, taskIndex-contextCount)
-		end := min(len(columnTasks), taskIndex+contextCount+1)
-
-		for i := start; i < end; i++ {
-			task := columnTasks[i]
-			prefix := "  "
-			if i == taskIndex {
-				prefix = "► " // Highlight the target task
-			}
-
-			priorityIcon := "⚪"
-			if task.Priority == "high" || task.Priority == "critical" {
-				priorityIcon = "⚫"
-			}
-
-			if i == taskIndex {
-				printer.Bold("%s%s %s %s", prefix, priorityIcon, task.ShortID, task.Title)
-			} else {
-				printer.Subtle("%s%s %s %s", prefix, priorityIcon, task.ShortID, task.Title)
-			}
+		if foundTask.FilePath == "" {
+			return fmt.Errorf("task '%s' has no file path", taskID)
 		}
 
-		fmt.Println()
-		printer.Info("Showing task %d of %d in column", taskIndex+1, len(columnTasks))
+		if _, err := os.Stat(foundTask.FilePath); err != nil {
+			return fmt.Errorf("task file not accessible: %w", err)
+		}
 
-		return nil
+		return openEditorForTaskFile(foundTask.FilePath)
 	},
 }
 
@@ -1115,9 +1155,11 @@ func openEditorForTask(title, description string) (string, error) {
 
 	// Open editor
 	cmd := exec.Command(editor, tmpPath)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cleanup, err := attachEditorIO(cmd)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
 
 	if err := cmd.Run(); err != nil {
 		return "", err
@@ -1170,9 +1212,11 @@ func openEditorForEmptyTask(priority string, tags []string) (string, error) {
 
 	titleLine := findFirstHeadingLine(string(data))
 	cmd := buildEditorCommand(editor, tmpPath, titleLine)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cleanup, err := attachEditorIO(cmd)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
 
 	if err := cmd.Run(); err != nil {
 		return "", err
@@ -1184,6 +1228,55 @@ func openEditorForEmptyTask(priority string, tags []string) (string, error) {
 	}
 
 	return string(edited), nil
+}
+
+func openEditorForTaskFile(path string) error {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	titleLine := findFirstHeadingLine(string(content))
+	cmd := buildEditorCommand(editor, path, titleLine)
+	cleanup, err := attachEditorIO(cmd)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	return cmd.Run()
+}
+
+func attachEditorIO(cmd *exec.Cmd) (func(), error) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return func() {}, nil
+	}
+
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return nil, fmt.Errorf("no interactive terminal available (run without piping)")
+	}
+
+	cmd.Stdin = tty
+	cmd.Stdout = tty
+	cmd.Stderr = tty
+
+	return func() {
+		_ = tty.Close()
+	}, nil
 }
 
 func buildEditorCommand(editor, path string, line int) *exec.Cmd {
@@ -1319,6 +1412,7 @@ func init() {
 	taskListCmd.Flags().String("tag", "", "Filter by tag")
 	taskListCmd.Flags().Bool("overdue", false, "Show only overdue tasks")
 	taskListCmd.Flags().String("due-before", "", "Show tasks due before date (YYYY-MM-DD)")
+	taskListCmd.Flags().Bool("all-boards", false, "List tasks from all boards")
 
 	// taskCreateCmd flags
 	taskCreateCmd.Flags().String("title", "", "Task title (optional; opens editor if omitted)")
@@ -1347,7 +1441,4 @@ func init() {
 	// taskCheckoutCmd flags
 	taskCheckoutCmd.Flags().String("branch-format", "", "Branch name format (default: {id})")
 	taskCheckoutCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")
-
-	// taskShowCmd flags
-	taskShowCmd.Flags().Int("context", 2, "Number of tasks to show before/after")
 }

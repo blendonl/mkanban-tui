@@ -13,6 +13,7 @@ func BoardToDTO(board *entity.Board) BoardDTO {
 
 	return BoardDTO{
 		ID:          board.ID(),
+		ProjectID:   board.ProjectID(),
 		Name:        board.Name(),
 		Prefix:      board.Prefix(),
 		Description: board.Description(),
@@ -26,6 +27,7 @@ func BoardToDTO(board *entity.Board) BoardDTO {
 func BoardToListDTO(board *entity.Board) BoardListDTO {
 	return BoardListDTO{
 		ID:          board.ID(),
+		ProjectID:   board.ProjectID(),
 		Name:        board.Name(),
 		Description: board.Description(),
 		TaskCount:   board.TotalTaskCount(),

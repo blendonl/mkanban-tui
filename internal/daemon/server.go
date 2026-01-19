@@ -280,6 +280,7 @@ func (s *Server) handleCreateBoard(ctx context.Context, req *Request) *Response 
 	defer s.mu.Unlock()
 
 	createReq := dto.CreateBoardRequest{
+		ProjectID:   payload.ProjectID,
 		Name:        payload.Name,
 		Description: payload.Description,
 	}
@@ -810,8 +811,8 @@ func (s *Server) handleCreateProject(ctx context.Context, req *Request) *Respons
 		return &Response{Success: false, Error: err.Error()}
 	}
 
-	id := uuid.New().String()
-	project, err := entity.NewProject(id, payload.Name, payload.Description)
+	projectID := slug.Generate(payload.Name)
+	project, err := entity.NewProject(projectID, payload.Name, payload.Description)
 	if err != nil {
 		return &Response{Success: false, Error: err.Error()}
 	}
@@ -1161,8 +1162,13 @@ func (s *Server) findTaskByShortID(ctx context.Context, shortID string) (*entity
 	activeSession := s.sessionManager.GetActiveSession()
 	var activeBoardID string
 	if activeSession != nil {
-		activeBoardID = slug.Generate(activeSession.Name())
-		fmt.Printf("[findTaskByShortID] Active session board: %s\n", activeBoardID)
+		if s.container.GetActiveSessionBoardUseCase != nil {
+			boardID, err := s.container.GetActiveSessionBoardUseCase.Execute(ctx, activeSession.Name())
+			if err == nil {
+				activeBoardID = boardID
+				fmt.Printf("[findTaskByShortID] Active session board: %s\n", activeBoardID)
+			}
+		}
 	}
 
 	searchBoard := func(boardID string) (*entity.Board, *entity.Task, string, error) {

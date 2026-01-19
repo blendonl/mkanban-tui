@@ -257,12 +257,12 @@ func (r *NoteRepositoryImpl) getProjectSlug(ctx context.Context, projectID strin
 			continue
 		}
 
-		var storage mapper.ProjectStorage
-		if err := serialization.ParseYaml(data, &storage); err != nil {
+		doc, err := serialization.ParseFrontmatter(data)
+		if err != nil {
 			continue
 		}
 
-		if storage.ID == projectID {
+		if doc.GetString("id") == projectID {
 			return entry.Name(), nil
 		}
 	}
@@ -289,12 +289,12 @@ func (r *NoteRepositoryImpl) getProjectSlugSync(projectID string) string {
 			continue
 		}
 
-		var storage mapper.ProjectStorage
-		if err := serialization.ParseYaml(data, &storage); err != nil {
+		doc, err := serialization.ParseFrontmatter(data)
+		if err != nil {
 			continue
 		}
 
-		if storage.ID == projectID {
+		if doc.GetString("id") == projectID {
 			return entry.Name()
 		}
 	}

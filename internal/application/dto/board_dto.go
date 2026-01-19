@@ -16,6 +16,7 @@ type BoardDTO struct {
 
 // CreateBoardRequest represents a request to create a board
 type CreateBoardRequest struct {
+	ProjectID   string `json:"project_id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
@@ -29,6 +30,7 @@ type UpdateBoardRequest struct {
 // BoardListDTO represents a simplified board for listing
 type BoardListDTO struct {
 	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id,omitempty"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	TaskCount   int       `json:"task_count"`

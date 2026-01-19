@@ -265,10 +265,11 @@ func getCurrentTmuxSession() string {
 }
 
 // CreateBoard creates a new board
-func (c *Client) CreateBoard(ctx context.Context, name, description string) (*dto.BoardDTO, error) {
+func (c *Client) CreateBoard(ctx context.Context, projectID, name, description string) (*dto.BoardDTO, error) {
 	req := &Request{
 		Type: RequestCreateBoard,
 		Payload: CreateBoardPayload{
+			ProjectID:   projectID,
 			Name:        name,
 			Description: description,
 		},

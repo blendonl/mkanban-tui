@@ -81,8 +81,8 @@ func (v *ValidationService) ValidateTaskTitle(title string) error {
 }
 
 // ValidateUniqueBoardName checks if a board name is unique
-func (v *ValidationService) ValidateUniqueBoardName(ctx context.Context, name string, excludeID string) error {
-	existingBoard, err := v.boardRepo.FindByName(ctx, name)
+func (v *ValidationService) ValidateUniqueBoardName(ctx context.Context, projectID string, name string, excludeID string) error {
+	existingBoard, err := v.boardRepo.FindByName(ctx, projectID, name)
 	if err == nil && existingBoard != nil && existingBoard.ID() != excludeID {
 		return entity.ErrBoardAlreadyExists
 	}
